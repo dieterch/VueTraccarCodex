@@ -89,6 +89,17 @@ export default defineNuxtConfig({
     minDays: parseInt(process.env.MIN_DAYS || '2'),
     standPeriod: parseInt(process.env.STAND_PERIOD || '12'),
     startDate: process.env.START_DATE || '2019-03-01T00:00:00Z',
+    jwtSecret: process.env.JWT_SECRET || 'change-me',
+    jwtIssuer: process.env.JWT_ISSUER || 'vue-traccar',
+    jwtAudience: process.env.JWT_AUDIENCE || 'vue-traccar-ui',
+    jwtTtlSeconds: parseInt(process.env.JWT_TTL_SECONDS || '3600'),
+    authCookieName: process.env.AUTH_COOKIE_NAME || 'vt_auth',
+    authCookieSecure: process.env.AUTH_COOKIE_SECURE
+      ? process.env.AUTH_COOKIE_SECURE === 'true'
+      : process.env.NODE_ENV === 'production',
+    adminGroup: process.env.ADMIN_GROUP || 'admins',
+    authBypass: process.env.AUTH_BYPASS === 'true',
+    authBypassRole: process.env.AUTH_BYPASS_ROLE || 'admin',
 
     public: {
       // Client-accessible

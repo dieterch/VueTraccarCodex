@@ -1,11 +1,13 @@
 <script setup>
-import { ref, onMounted, mergeProps } from 'vue';
+import { ref, onMounted, mergeProps, computed } from 'vue';
 import { useTraccar } from '~/composables/useTraccar';
 import { useMapData } from '~/composables/useMapData';
-import { setCookie, deleteCookie } from '~/utils/crypto';
+import { setCookie } from '~/utils/crypto';
+import { useAuth } from '~/composables/useAuth';
 
 const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute } = useTraccar();
 const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode } = useMapData();
+const { isAdmin } = useAuth();
 
 const prefetching = ref(false);
 
@@ -34,7 +36,14 @@ async function update_travel(item) {
     renderMap()
 }
 
-const menuitems = ref(['POI Mode', 'Settings', 'About', 'Debug', 'Export als KML', 'Log Out', 'Prefetch again']) //, 'Export als GPX', 'Export als CSV', 'Export als PDF'])
+const menuitems = computed(() => {
+    const items = ['POI Mode']
+    if (isAdmin.value) {
+        items.push('Settings')
+    }
+    items.push('About', 'Debug', 'Export als KML', 'Log Out', 'Prefetch again')
+    return items
+})
 async function domenu(item) {
     switch (item) {
         case 'POI Mode':
@@ -54,7 +63,8 @@ async function domenu(item) {
             downloadKml()
             break;
         case 'Log Out':
-            deleteCookie('authenticated')
+            await $fetch('/api/auth/logout', { method: 'POST' })
+            window.location.reload()
             break;
         case 'Prefetch again':
             await handlePrefetchAgain()

@@ -4,6 +4,10 @@ import { join } from 'path'
 
 export default defineEventHandler(async (event) => {
   try {
+    const auth = event.context.auth
+    if (!auth || auth.role !== 'admin') {
+      throw createError({ statusCode: 403, message: 'Admin access required' })
+    }
     const body = await readBody(event)
     const config = useRuntimeConfig()
 

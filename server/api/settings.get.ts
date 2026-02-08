@@ -4,6 +4,10 @@ import { join } from 'path'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
+  const auth = event.context.auth
+  if (!auth || auth.role !== 'admin') {
+    throw createError({ statusCode: 403, message: 'Admin access required' })
+  }
 
   // Helper function to mask sensitive values
   const maskSecret = (value: string | undefined | null): string => {

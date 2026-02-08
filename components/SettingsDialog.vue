@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useMapData } from '~/composables/useMapData'
 
 const { configdialog } = useMapData()
@@ -8,13 +8,6 @@ const loading = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
-
-// Password protection
-const isAuthenticated = ref(false)
-const password = ref('')
-const passwordError = ref('')
-const verifyingPassword = ref(false)
-const authTimestamp = ref(null)
 
 // Available options from API
 const geofences = ref([])
@@ -68,9 +61,7 @@ const showPassword = ref({
   traccarPassword: false,
   googleMapsApiKey: false,
   wordpressAppPassword: false,
-  vueTraccarPassword: false,
-  settingsPassword: false,
-  inputPassword: false
+  vueTraccarPassword: false
 })
 
 // Expansion panel state
@@ -103,39 +94,6 @@ const newSideTripDevice = ref({
 
 // Default color palette
 const defaultColors = ['#0088FF', '#00CC44', '#9933FF', '#FF6600', '#FFD700', '#FF1493']
-
-// Verify password
-async function verifyPassword() {
-  if (!password.value) {
-    passwordError.value = 'Password is required'
-    return
-  }
-
-  verifyingPassword.value = true
-  passwordError.value = ''
-
-  try {
-    const response = await $fetch('/api/settings/verify-password', {
-      method: 'POST',
-      body: { password: password.value }
-    })
-
-    if (response.valid) {
-      isAuthenticated.value = true
-      authTimestamp.value = Date.now()
-      password.value = ''
-      await loadSettings()
-    } else {
-      passwordError.value = 'Invalid password'
-      password.value = ''
-    }
-  } catch (error) {
-    console.error('Error verifying password:', error)
-    passwordError.value = 'Failed to verify password'
-  } finally {
-    verifyingPassword.value = false
-  }
-}
 
 // Load current settings and available options
 async function loadSettings() {
@@ -399,44 +357,14 @@ function onSideTripDeviceSelected(id) {
 }
 
 // Watch for dialog open
-watch(() => configdialog.value, (isOpen) => {
-  const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000 // 12 hours in milliseconds
-
+watch(() => configdialog.value, async (isOpen) => {
   if (isOpen) {
-    // Check if authentication has expired (12 hours have passed)
-    if (authTimestamp.value) {
-      const elapsed = Date.now() - authTimestamp.value
-      if (elapsed >= TWELVE_HOURS_MS) {
-        // Authentication expired, reset
-        isAuthenticated.value = false
-        authTimestamp.value = null
-        password.value = ''
-        passwordError.value = ''
-      }
-    }
-
-    // Clear input fields if not authenticated
-    if (!isAuthenticated.value) {
-      password.value = ''
-      passwordError.value = ''
-    }
-
     successMessage.value = ''
     errorMessage.value = ''
+    await loadSettings()
   } else {
-    // When closing dialog, check if 12 hours have passed before resetting
-    if (authTimestamp.value) {
-      const elapsed = Date.now() - authTimestamp.value
-      if (elapsed >= TWELVE_HOURS_MS) {
-        // Authentication expired, reset
-        isAuthenticated.value = false
-        authTimestamp.value = null
-      }
-    }
-
-    // Always clear temporary input fields
-    password.value = ''
-    passwordError.value = ''
+    successMessage.value = ''
+    errorMessage.value = ''
   }
 })
 </script>
@@ -458,57 +386,8 @@ watch(() => configdialog.value, (isOpen) => {
 
       <v-card-text class="pa-4" style="max-height: 70vh;">
         <v-container fluid>
-          <!-- Password Prompt -->
-          <div v-if="!isAuthenticated">
-            <v-row>
-              <v-col cols="12" class="text-center mb-4">
-                <v-icon icon="mdi-lock" size="64" color="primary"></v-icon>
-                <div class="text-h6 mt-4">Settings Password Required</div>
-                <div class="text-body-2 text-grey mt-2">
-                  Enter the settings password to access configuration
-                </div>
-              </v-col>
-            </v-row>
-
-            <v-row>
-              <v-col cols="12">
-                <v-text-field
-                  v-model="password"
-                  label="Settings Password"
-                  variant="outlined"
-                  density="comfortable"
-                  prepend-inner-icon="mdi-lock"
-                  :type="showPassword.inputPassword ? 'text' : 'password'"
-                  :append-inner-icon="showPassword.inputPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                  @click:append-inner="showPassword.inputPassword = !showPassword.inputPassword"
-                  @keyup.enter="verifyPassword"
-                  :error-messages="passwordError"
-                  :disabled="verifyingPassword"
-                  autofocus
-                ></v-text-field>
-              </v-col>
-            </v-row>
-
-            <v-row>
-              <v-col cols="12" class="text-center">
-                <v-btn
-                  color="primary"
-                  variant="elevated"
-                  @click="verifyPassword"
-                  :loading="verifyingPassword"
-                  :disabled="!password"
-                  size="large"
-                  class="px-8"
-                >
-                  <v-icon icon="mdi-login" class="mr-2"></v-icon>
-                  Unlock Settings
-                </v-btn>
-              </v-col>
-            </v-row>
-          </div>
-
           <!-- Loading State -->
-          <v-row v-else-if="loading">
+          <v-row v-if="loading">
             <v-col cols="12" class="text-center">
               <v-progress-circular
                 indeterminate
@@ -746,21 +625,6 @@ watch(() => configdialog.value, (isOpen) => {
                     :append-inner-icon="showPassword.vueTraccarPassword ? 'mdi-eye-off' : 'mdi-eye'"
                     @click:append-inner="showPassword.vueTraccarPassword = !showPassword.vueTraccarPassword"
                     :placeholder="settings.vueTraccarPassword === '••••••••' ? 'Current password hidden - enter new password to change' : ''"
-                    hint="Leave masked value to keep current password, or enter new password to change"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
-                    v-model="settings.settingsPassword"
-                    label="Settings Password"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-lock-alert"
-                    :type="showPassword.settingsPassword ? 'text' : 'password'"
-                    :append-inner-icon="showPassword.settingsPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append-inner="showPassword.settingsPassword = !showPassword.settingsPassword"
-                    :placeholder="settings.settingsPassword === '••••••••' ? 'Current password hidden - enter new password to change' : ''"
                     hint="Leave masked value to keep current password, or enter new password to change"
                     persistent-hint
                     class="mb-3"

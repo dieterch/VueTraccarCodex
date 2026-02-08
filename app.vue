@@ -1,13 +1,10 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted } from 'vue'
 import { useTraccar } from '~/composables/useTraccar'
 import { useMapData } from '~/composables/useMapData'
+import { useAuth } from '~/composables/useAuth'
 
-// Note: Authentication is disabled (SSO forward-auth mode)
-// If you need password authentication, uncomment below and set hash
-// import { hashPassword } from '~/utils/crypto'
-// const vueTraccarHash = hashPassword('your-password')
-const vueTraccarHash = '';
+const { authState, authReady, authError, bootstrapAuth } = useAuth()
 
 const {
   startdate,
@@ -26,19 +23,24 @@ const {
   toggleEvents
 } = useMapData()
 
-// Authentication
-// Set to true to skip authentication (SSO forward-auth implemented)
-const authenticated = ref(true)
+onMounted(async () => {
+  await bootstrapAuth()
+})
 </script>
 
 <template>
   <v-app class="rounded rounded-md">
-    <div v-if="!authenticated">
-      <Login
-        :hash="vueTraccarHash"
-        :authenticated="authenticated"
-        @authenticated="(e) => { authenticated = e }"
-      />
+    <div v-if="!authReady" class="d-flex align-center justify-center" style="height: 100vh">
+      <v-progress-circular indeterminate color="primary"></v-progress-circular>
+    </div>
+    <div v-else-if="!authState.authenticated" class="d-flex align-center justify-center" style="height: 100vh">
+      <v-sheet width="480" class="mx-auto pa-6 text-center">
+        <v-icon icon="mdi-shield-alert" size="64" color="error"></v-icon>
+        <div class="text-h6 mt-4">Authentication Failed</div>
+        <div class="text-body-2 text-grey mt-2">
+          {{ authError || 'No valid authentication headers received.' }}
+        </div>
+      </v-sheet>
     </div>
     <div v-else>
       <AppBar />
