@@ -421,8 +421,8 @@ async function loadStandstillSideTrips(location, isReload = false) {
       clearSideTrips()
     }
 
-    // Get enabled side trip devices from settings
-    const settingsResponse = await $fetch('/api/settings')
+    // Get enabled side trip devices from side trips config (user-safe)
+    const settingsResponse = await $fetch('/api/side-trips/config')
     if (!settingsResponse.success || !settingsResponse.settings.sideTripEnabled) {
       alert('Side trip tracking is not enabled. Please enable it in settings first.')
       return
