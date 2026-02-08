@@ -148,6 +148,7 @@ JWT_AUDIENCE=vue-traccar-ui
 AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
+NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
 ```
 
 ### Local development without Authelia/Traefik/Docker
@@ -156,6 +157,7 @@ ADMIN_GROUP=admins
 AUTH_BYPASS=true
 AUTH_BYPASS_ROLE=admin
 AUTH_COOKIE_SECURE=false
+NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=http://localhost:9091/logout
 ```
 
 Notes:
@@ -234,6 +236,7 @@ Notes:
    AUTH_COOKIE_NAME=vt_auth
    AUTH_COOKIE_SECURE=true
    ADMIN_GROUP=admins
+   NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
 
    # Server (Optional)
    PORT=5999
@@ -380,6 +383,7 @@ Notes:
 ### Settings
 - `GET /api/settings` - Get all current settings
 - `POST /api/settings` - Save settings to YAML file
+- `GET /api/side-trips/config` - Read-only side trip config for users (safe subset of settings)
 ### Auth
 - `POST /api/auth/token` - Issue JWT from Authelia headers
 - `GET /api/auth/me` - Return JWT auth status

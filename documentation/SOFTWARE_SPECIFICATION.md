@@ -696,6 +696,20 @@ interface KMLOptions {
 }
 ```
 
+#### GET /api/side-trips/config
+**Description:** Get side trip configuration (auth required, user-safe subset of settings)
+**Response:**
+```typescript
+{
+  success: boolean
+  settings: {
+    sideTripEnabled: boolean
+    sideTripDevices: Array<any>
+    sideTripBufferHours: number
+  }
+}
+```
+
 #### POST /api/settings
 **Description:** Save all settings to YAML file (admin-only, rejects empty strings)
 **Request Body:** Same as GET response
@@ -1343,6 +1357,7 @@ AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
 AUTH_BYPASS=false
 AUTH_BYPASS_ROLE=admin
+NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
 ```
 
 **Server Settings:**
@@ -1373,7 +1388,8 @@ export default defineNuxtConfig({
     // ... all settings
     public: {
       // Client-accessible
-      googleMapsApiKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_API_KEY
+      googleMapsApiKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+      autheliaLogoutUrl: process.env.NUXT_PUBLIC_AUTHELIA_LOGOUT_URL
     }
   }
 })

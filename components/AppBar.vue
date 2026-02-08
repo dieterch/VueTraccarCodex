@@ -7,7 +7,8 @@ import { useAuth } from '~/composables/useAuth';
 
 const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute } = useTraccar();
 const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode } = useMapData();
-const { isAdmin } = useAuth();
+const config = useRuntimeConfig();
+const { isAdmin, authState } = useAuth();
 
 const prefetching = ref(false);
 
@@ -45,6 +46,9 @@ const menuitems = computed(() => {
     if (isAdmin.value) {
         items.push('Debug', 'Prefetch again')
     }
+    if (authState.value.authenticated) {
+        items.push('Log Out')
+    }
     return items
 })
 async function domenu(item) {
@@ -68,6 +72,9 @@ async function domenu(item) {
         case 'Prefetch again':
             await handlePrefetchAgain()
             break;
+        case 'Log Out':
+            await logout()
+            break;
         case 'Export als GPX':
             //downloadgpx()
             break;
@@ -77,6 +84,21 @@ async function domenu(item) {
         case 'Export als PDF':
             //downloadpdf()
             break;
+    }
+}
+
+async function logout() {
+    try {
+        await $fetch('/api/auth/logout', { method: 'POST' })
+    } catch (error) {
+        console.error('Error during logout:', error)
+    } finally {
+        const logoutUrl = config.public.autheliaLogoutUrl
+        if (logoutUrl && typeof window !== 'undefined') {
+            window.location.assign(logoutUrl)
+        } else if (typeof window !== 'undefined') {
+            window.location.reload()
+        }
     }
 }
 

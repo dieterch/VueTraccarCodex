@@ -424,7 +424,9 @@ async function loadStandstillSideTrips(location, isReload = false) {
     // Get enabled side trip devices from side trips config (user-safe)
     const settingsResponse = await $fetch('/api/side-trips/config')
     if (!settingsResponse.success || !settingsResponse.settings.sideTripEnabled) {
-      alert('Side trip tracking is not enabled. Please enable it in settings first.')
+      alert(isAdmin.value
+        ? 'Side trip tracking is not enabled. Please enable it in settings first.'
+        : 'Side trip tracking is disabled. Ask an admin to enable it in Settings.')
       return
     }
 
@@ -433,7 +435,9 @@ async function loadStandstillSideTrips(location, isReload = false) {
       .map(d => d.deviceId) || []
 
     if (deviceIds.length === 0) {
-      alert('No secondary devices configured. Please add devices in settings.')
+      alert(isAdmin.value
+        ? 'No secondary devices configured. Please add devices in settings.'
+        : 'Side trip devices are not configured. Ask an admin to add devices in Settings.')
       return
     }
 
