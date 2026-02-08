@@ -18,7 +18,7 @@ Modern Nuxt 3 rewrite of VueTraccar with TypeScript backend, replacing Python/Qu
 - 📍 **Manual POI Creation** (Cmd/Ctrl+Click on map)
 - 🎯 **POI Mode** for independent point-of-interest markers
 - 📥 **KML Export** for route sharing (Google Earth compatible)
-- 🔒 **Password Protection** for app and settings access
+- 🔐 **JWT Authorization** for API access (Authelia forward-auth integration)
 - 🎨 **Vuetify 3** Material Design UI
 - ⚡ **Fast Performance** with WAL mode SQLite
 - 💾 **Data Export/Import Scripts** for backup and portability
@@ -56,7 +56,8 @@ VueTraccarCodex/
 │   │   ├── prefetchroute.ts, delprefetch.ts, cache-status.ts
 │   │   ├── travels.ts, download.kml.ts
 │   │   ├── travel-patches.ts, travel-patches/[addressKey].ts
-│   │   ├── settings.ts, settings/verify-password.ts
+│   │   ├── settings.ts
+│   │   ├── auth/token.ts, auth/me.ts, auth/logout.ts
 │   │   ├── document/[key].ts
 │   │   ├── wordpress/posts/[tag].ts, wordpress/test.ts
 │   │   └── geofences.ts
@@ -70,8 +71,11 @@ VueTraccarCodex/
 │   └── utils/            # Server utilities
 │       ├── cache.ts                # route.db operations
 │       ├── app-db.ts               # app.db operations
+│       ├── auth.ts                 # JWT helpers
 │       ├── traccar-client.ts       # Traccar API client
 │       └── wordpress-client.ts     # WordPress API client
+│   └── middleware/       # Server middleware
+│       └── auth.ts                 # JWT enforcement for /api
 ├── components/           # Vue components
 │   ├── AppBar.vue, GMap.vue, SideBar.vue
 │   ├── DateDialog.vue, AboutDialog.vue
@@ -124,9 +128,40 @@ mkdir -p data/cache data/documents
 npm run dev
 # Open http://localhost:3000
 
-# Login with your VUE_TRACCAR_PASSWORD
 # The app will automatically prefetch GPS data on first run (10-15 minutes)
 ```
+
+## Authentication (Authelia + JWT)
+
+This app expects to run behind Authelia forward-auth (e.g., via Traefik). It derives the user and role from headers and issues a short-lived JWT for API calls.
+
+### Required forward-auth headers
+- `Remote-User`
+- `Remote-Groups` (comma-separated, must include `admins` for admin role)
+
+### JWT and role settings
+```bash
+# JWT configuration (Required)
+JWT_SECRET=change-me
+JWT_TTL_SECONDS=3600
+JWT_ISSUER=vue-traccar
+JWT_AUDIENCE=vue-traccar-ui
+AUTH_COOKIE_NAME=vt_auth
+AUTH_COOKIE_SECURE=true
+ADMIN_GROUP=admins
+```
+
+### Local development without Authelia/Traefik/Docker
+```bash
+# Bypass auth in dev only (ignored in production)
+AUTH_BYPASS=true
+AUTH_BYPASS_ROLE=admin
+AUTH_COOKIE_SECURE=false
+```
+
+Notes:
+- Settings UI and `/api/settings*` are admin-only.
+- If Authelia headers are missing, `/api/auth/token` returns 401.
 
 ## Setup
 
@@ -173,7 +208,7 @@ npm run dev
    WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx
    WORDPRESS_CACHE_DURATION=3600
 
-   # Application Security (Required)
+   # Application Security (Legacy fields)
    VUE_TRACCAR_PASSWORD=your-app-password
    SETTINGS_PASSWORD=your-settings-password
 
