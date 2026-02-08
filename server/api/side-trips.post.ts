@@ -1,4 +1,7 @@
 import { createTraccarClient } from '../utils/traccar-client'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
+import { parse as parseYaml } from 'yaml'
 import type { DevicePolyline } from '~/types/traccar'
 
 /**
@@ -75,10 +78,12 @@ export default defineEventHandler(async (event) => {
             deviceName = device.name
           }
 
-          // Load device settings for color/weight
-          const settingsResponse = await $fetch('/api/settings')
-          if (settingsResponse.success && settingsResponse.settings.sideTripDevices) {
-            const deviceConfig = settingsResponse.settings.sideTripDevices.find(
+          // Load device settings for color/weight without requiring admin-only /api/settings
+          const yamlPath = join(process.cwd(), 'data', 'settings.yml')
+          const content = await readFile(yamlPath, 'utf-8')
+          const settings = parseYaml(content) || {}
+          if (Array.isArray(settings.sideTripDevices)) {
+            const deviceConfig = settings.sideTripDevices.find(
               (d: any) => d.deviceId === deviceId
             )
             if (deviceConfig) {
@@ -86,8 +91,10 @@ export default defineEventHandler(async (event) => {
               deviceLineWeight = deviceConfig.lineWeight || deviceLineWeight
             }
           }
-        } catch (error) {
-          console.error('Error fetching device info:', error)
+        } catch (error: any) {
+          if (error?.code !== 'ENOENT') {
+            console.error('Error fetching device info:', error)
+          }
         }
 
         // Create polyline path directly from Traccar positions

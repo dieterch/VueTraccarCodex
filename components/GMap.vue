@@ -10,6 +10,7 @@ import {
 import { GoogleMapsLink, stripPlusCode } from "~/utils/maps";
 import { useMapData } from "~/composables/useMapData";
 import { useDocuments } from "~/composables/useDocuments";
+import { useAuth } from "~/composables/useAuth";
 import MDDialog from "./MDDialog.vue";
 
 const config = useRuntimeConfig();
@@ -24,6 +25,7 @@ console.log('Map ID:', maps_map_id);
 
 const { polygone, polylines, sideTripPolylines, center, zoom, locations, togglemarkers, togglepath, isLoading, loadingMessage, fetchSideTrips, clearSideTrips, poiMode, renderMap } = useMapData();
 const { getDocument } = useDocuments();
+const { isAdmin } = useAuth();
 
 // Side trip loading state
 const loadingSideTrips = ref<Record<string, boolean>>({});
@@ -999,6 +1001,7 @@ function decodeHtml(html) {
 
 
                   <v-btn
+                    v-if="isAdmin"
                     color="warning"
                     size="small"
                     @click.stop="openAdjustmentDialog(location)"
@@ -1026,6 +1029,7 @@ function decodeHtml(html) {
                   </v-btn>
 
                   <v-btn
+                    v-if="isAdmin"
                     color="grey-darken-2"
                     variant="outlined"
                     size="small"
@@ -1040,7 +1044,7 @@ function decodeHtml(html) {
                   
                   <!-- POI Delete Section -->
                     <v-btn
-                    v-if="location.isPOI"
+                    v-if="isAdmin && location.isPOI"
                     block
                     color="error"
                     size="small"
