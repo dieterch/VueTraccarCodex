@@ -37,11 +37,14 @@ async function update_travel(item) {
 }
 
 const menuitems = computed(() => {
-    const items = ['POI Mode']
+    const items = []
     if (isAdmin.value) {
-        items.push('Settings')
+        items.push('POI Mode', 'Settings')
     }
-    items.push('About', 'Debug', 'Export als KML', 'Log Out', 'Prefetch again')
+    items.push('About', 'Export als KML')
+    if (isAdmin.value) {
+        items.push('Debug', 'Prefetch again')
+    }
     return items
 })
 async function domenu(item) {
@@ -61,10 +64,6 @@ async function domenu(item) {
             break;
         case 'Export als KML':
             downloadKml()
-            break;
-        case 'Log Out':
-            await $fetch('/api/auth/logout', { method: 'POST' })
-            window.location.reload()
             break;
         case 'Prefetch again':
             await handlePrefetchAgain()

@@ -1,7 +1,9 @@
 <script setup>
 import { useMapData } from '~/composables/useMapData'
+import { useAuth } from '~/composables/useAuth'
 
 const { aboutdialog } = useMapData()
+const { isAdmin } = useAuth()
 
 // App information
 const appName = 'VueTraccarCodex'
@@ -57,7 +59,7 @@ const scripts = [
 
           <v-divider class="my-4"></v-divider>
 
-          <v-row>
+          <v-row v-if="isAdmin">
             <v-col cols="12">
               <div class="text-subtitle-1 font-weight-bold mb-3">
                 Key Features
@@ -77,9 +79,9 @@ const scripts = [
             </v-col>
           </v-row>
 
-          <v-divider class="my-4"></v-divider>
+          <v-divider class="my-4" v-if="isAdmin"></v-divider>
 
-          <v-row>
+          <v-row v-if="isAdmin">
             <v-col cols="12">
               <div class="text-subtitle-1 font-weight-bold mb-3">
                 Data Management Scripts
