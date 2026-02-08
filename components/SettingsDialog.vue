@@ -71,8 +71,6 @@ const newPatch = ref({
   exclude: false
 })
 const showAddPatchForm = ref(false)
-const migratingYaml = ref(false)
-
 // Side Trip Device Management
 const editingSideTripDevice = ref(null)
 const showAddDeviceForm = ref(false)
@@ -243,25 +241,6 @@ async function deleteTravelPatch(addressKey) {
   } catch (error) {
     console.error('Error deleting travel patch:', error)
     errorMessage.value = 'Failed to delete travel patch'
-  }
-}
-
-// Migrate from YAML
-async function migrateFromYaml() {
-  if (!confirm('Migrate travel patches from travels.yml to database? Existing patches will be updated.')) return
-
-  migratingYaml.value = true
-  try {
-    const response = await $fetch('/api/travel-patches/migrate', {
-      method: 'POST'
-    })
-    successMessage.value = response.message
-    await loadTravelPatches()
-  } catch (error) {
-    console.error('Error migrating from YAML:', error)
-    errorMessage.value = 'Failed to migrate from YAML'
-  } finally {
-    migratingYaml.value = false
   }
 }
 
@@ -755,30 +734,6 @@ watch(() => configdialog.value, async (isOpen) => {
                   <div class="text-body-2 text-grey mb-4">
                     Manage custom titles and date overrides for detected travels. Each patch is matched by the travel's farthest destination address.
                   </div>
-
-                  <!-- Migration Button -->
-                  <v-alert
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                    class="mb-4"
-                  >
-                    <div class="d-flex align-center justify-space-between">
-                      <div>
-                        <strong>First time setup?</strong> Migrate existing travels.yml to database
-                      </div>
-                      <v-btn
-                        size="small"
-                        variant="elevated"
-                        color="primary"
-                        @click="migrateFromYaml"
-                        :loading="migratingYaml"
-                      >
-                        <v-icon icon="mdi-database-import" class="mr-1"></v-icon>
-                        Migrate from YAML
-                      </v-btn>
-                    </div>
-                  </v-alert>
 
                   <!-- Add New Patch Button -->
                   <v-btn

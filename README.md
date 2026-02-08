@@ -79,7 +79,7 @@ VueTraccarCodex/
 ├── components/           # Vue components
 │   ├── AppBar.vue, GMap.vue, SideBar.vue
 │   ├── DateDialog.vue, AboutDialog.vue
-│   ├── SettingsDialog.vue          # Password-protected settings
+│   ├── SettingsDialog.vue          # Admin-only settings
 │   ├── MDEditorDialog.vue, MDDialog.vue
 │   └── DebugDialog.vue, Login.vue
 ├── composables/          # State management
@@ -103,7 +103,6 @@ VueTraccarCodex/
 │   │   └── app.db        # Travel patches, settings, manual POIs
 │   ├── documents/        # RST travel notes (create manually)
 │   ├── settings.yml      # Runtime configuration (not in git)
-│   └── travels.yml       # Legacy travel patches (not in git)
 ├── types/                # TypeScript definitions
 └── documentation/        # Project documentation
     └── SOFTWARE_SPECIFICATION.md
@@ -161,6 +160,7 @@ AUTH_COOKIE_SECURE=false
 
 Notes:
 - Settings UI and `/api/settings*` are admin-only.
+- Secrets are visible in the Settings UI; use HTTPS in production.
 - If Authelia headers are missing, `/api/auth/token` returns 401.
 
 ## Setup
@@ -201,6 +201,7 @@ Notes:
 
    # Google Maps (Required)
    NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-api-key
+   NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=your-map-id
 
    # WordPress (Optional)
    WORDPRESS_URL=https://blog.example.com
@@ -208,7 +209,7 @@ Notes:
    WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx
    WORDPRESS_CACHE_DURATION=3600
 
-   # Application Security (Legacy fields)
+   # Application Security (Legacy fields, not used for auth)
    VUE_TRACCAR_PASSWORD=your-app-password
    SETTINGS_PASSWORD=your-settings-password
 
@@ -220,10 +221,19 @@ Notes:
 
    # Route Analysis (Optional, defaults provided)
    EVENT_MIN_GAP=60
-   MIN_TRAVEL_DAYS=2
-   MAX_TRAVEL_DAYS=170
-   STANDSTILL_PERIOD=12
-   ANALYSIS_START_DATE=2020-01-01T00:00:00Z
+   MIN_DAYS=2
+   MAX_DAYS=170
+   STAND_PERIOD=12
+   START_DATE=2020-01-01T00:00:00Z
+
+   # Auth (Required in production)
+   JWT_SECRET=change-me
+   JWT_TTL_SECONDS=3600
+   JWT_ISSUER=vue-traccar
+   JWT_AUDIENCE=vue-traccar-ui
+   AUTH_COOKIE_NAME=vt_auth
+   AUTH_COOKIE_SECURE=true
+   ADMIN_GROUP=admins
 
    # Server (Optional)
    PORT=5999
@@ -264,10 +274,9 @@ Notes:
 
 ### First Time Setup
 
-1. **Login:** Enter your `VUE_TRACCAR_PASSWORD` when prompted
-2. **Wait for Prefetch:** First run will cache all GPS data (10-15 minutes)
-3. **Select Date Range:** Use the date picker to choose a travel period
-4. **View Travels:** Click on a travel in the sidebar to load the map
+1. **Wait for Prefetch:** First run will cache all GPS data (10-15 minutes)
+2. **Select Date Range:** Use the date picker to choose a travel period
+3. **View Travels:** Click on a travel in the sidebar to load the map
 
 ### Main Features
 
@@ -290,7 +299,7 @@ Notes:
 3. Click "Edit Document" to add private notes (RST format)
 
 #### Creating Manual POIs
-1. Enable **POI Mode** toggle in AppBar
+1. Enable **POI Mode** toggle in AppBar (admin-only)
 2. Hold **Cmd** (Mac) or **Ctrl** (Windows/Linux)
 3. Click anywhere on the map
 4. POI is created with automatic geocoding
@@ -298,27 +307,26 @@ Notes:
 
 #### Managing Settings
 1. Click menu icon (three dots) in AppBar
-2. Select "Settings"
-3. Enter `SETTINGS_PASSWORD`
-4. Configure 7 settings panels:
+2. Select "Settings" (admin-only)
+3. Configure 7 settings panels:
    - Traccar API credentials
-   - Google Maps API key
+   - Google Maps API key + Map ID
    - WordPress integration (optional)
-   - Application passwords
+   - Application settings (legacy password field)
    - Home geofence selection
    - Route analysis parameters
    - Travel patches (overrides)
-5. Click "Save All Settings"
-6. Settings persist in `data/settings.yml`
+4. Click "Save All Settings"
+5. Settings persist in `data/settings.yml` (auto-created on first load)
+6. Empty strings are rejected; keep a value or remove the field entirely
 
 #### Travel Patches (Manual Overrides)
 1. Open Settings → Travel Patches panel
-2. **Migrate from YAML:** Import legacy `travels.yml`
-3. **Add New Patch:**
+2. **Add New Patch:**
    - Enter address key (e.g., "Vienna, Austria")
    - Set custom title, dates, or exclude flag
-4. **Edit Existing:** Click edit icon (✏️)
-5. **Delete:** Click delete icon (🗑️) with confirmation
+3. **Edit Existing:** Click edit icon (✏️)
+4. **Delete:** Click delete icon (🗑️) with confirmation
 
 #### Exporting Routes
 1. Load a travel on the map
@@ -368,12 +376,14 @@ Notes:
 - `GET /api/travel-patches` - List all travel patches
 - `POST /api/travel-patches` - Create or update a travel patch
 - `DELETE /api/travel-patches/[addressKey]` - Delete a travel patch
-- `POST /api/travel-patches/migrate` - Migrate patches from YAML to database
 
 ### Settings
 - `GET /api/settings` - Get all current settings
 - `POST /api/settings` - Save settings to YAML file
-- `POST /api/settings/verify-password` - Verify settings password
+### Auth
+- `POST /api/auth/token` - Issue JWT from Authelia headers
+- `GET /api/auth/me` - Return JWT auth status
+- `POST /api/auth/logout` - Clear auth cookie
 
 ### Documents
 - `GET /api/document/[key]` - Load RST document
@@ -396,7 +406,7 @@ Notes:
 - Automatic trip detection from geofence events
 - Duration filtering (2-170 days)
 - Farthest standstill calculation
-- Manual patches via database (with YAML fallback)
+- Manual patches via database
 - Travel patches management UI with edit/delete functionality
 
 ### Manual POI Creation
@@ -422,8 +432,9 @@ Notes:
 - Featured image display in KML placemarks
 
 ### Settings Management
-- Password-protected settings dialog
+- Admin-only settings dialog (JWT-based)
 - Runtime configuration via `settings.yml` (overrides .env)
+- Secrets are visible to admins; use HTTPS in production
 - 7 configuration panels:
   - Traccar API Configuration
   - Google Maps Configuration
@@ -433,7 +444,6 @@ Notes:
   - Route Analysis Parameters
   - Travel Patches Management
 - Device and geofence dropdown selection
-- API connectivity testing
 
 ### Data Management & Portability
 - Export/import scripts for backup and transfer
@@ -605,8 +615,9 @@ sudo certbot renew --dry-run
 ### Environment Setup
 
 **Production Checklist:**
-- [ ] Set strong passwords (VUE_TRACCAR_PASSWORD, SETTINGS_PASSWORD)
+- [ ] Set `JWT_SECRET` and disable `AUTH_BYPASS`
 - [ ] Configure HTTPS with valid SSL certificate
+- [ ] Set `AUTH_COOKIE_SECURE=true` for HTTPS
 - [ ] Restrict Google Maps API key by HTTP referrer
 - [ ] Enable firewall (allow 443, 80, deny 5999 from external)
 - [ ] Set up automated backups (see Data Management Scripts)
@@ -621,17 +632,17 @@ sudo certbot renew --dry-run
 - **Dual Database Architecture:** Separated `route.db` (caching) and `app.db` (settings)
 - **Manual POI Creation:** Create points of interest by Cmd/Ctrl+Click on map
 - **POI Mode Toggle:** Independent marker mode for user-created POIs
-- **Settings Management UI:** Comprehensive password-protected settings dialog
+- **Settings Management UI:** Admin-only settings dialog
 - **Travel Patches Management:** Edit, create, and delete travel overrides in UI
-- **Database Migration:** Migrate travel patches from YAML to database
+- **JWT Authentication:** Authelia forward-auth with JWT for API calls
 - **WordPress in KML:** Standstill markers in KML exports include WordPress titles
 - **Data Export/Import Scripts:** 6 scripts for backup/restore/portability
 - **Cache Status Endpoint:** Monitor database statistics
 - **About Dialog:** Version info and feature highlights
 
 ### Security & Data Management
-- **Password Protection:** Separate passwords for app and settings access
-- **Sensitive Files Excluded:** `settings.yml`, `travels.yml`, and databases not tracked in git
+- **JWT Auth:** Admin-only configuration access
+- **Sensitive Files Excluded:** `settings.yml` and databases not tracked in git
 - **Configuration Priority:** `settings.yml` overrides `.env` for runtime changes
 - **Complete Backup Workflows:** Export/import scripts for all application data
 
@@ -665,7 +676,7 @@ This project is a complete rewrite from Python/Quart to Nuxt 4 with TypeScript:
 ### Configuration Priority
 
 Settings are loaded with the following priority (highest to lowest):
-1. `data/settings.yml` (created via Settings dialog)
+1. `data/settings.yml` (auto-created on first Settings load)
 2. `.env` file (manual configuration)
 3. Environment variables
 4. Default values
@@ -683,6 +694,7 @@ TRACCAR_DEVICE_ID=4
 
 # Google Maps
 NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-api-key
+NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=your-map-id
 
 # WordPress (optional)
 WORDPRESS_URL=https://blog.example.com
@@ -690,7 +702,7 @@ WORDPRESS_USER=username
 WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx
 WORDPRESS_CACHE_DURATION=3600
 
-# Application
+# Application (legacy fields, not used for auth)
 VUE_TRACCAR_PASSWORD=your-app-password
 SETTINGS_PASSWORD=your-settings-password
 HOME_MODE=false
@@ -700,10 +712,21 @@ HOME_GEOFENCE_ID=1
 
 # Route Analysis
 EVENT_MIN_GAP=60
-MIN_TRAVEL_DAYS=2
-MAX_TRAVEL_DAYS=170
-STANDSTILL_PERIOD=12
-ANALYSIS_START_DATE=2020-01-01T00:00:00Z
+MIN_DAYS=2
+MAX_DAYS=170
+STAND_PERIOD=12
+START_DATE=2020-01-01T00:00:00Z
+
+# Auth (Required in production)
+JWT_SECRET=change-me
+JWT_TTL_SECONDS=3600
+JWT_ISSUER=vue-traccar
+JWT_AUDIENCE=vue-traccar-ui
+AUTH_COOKIE_NAME=vt_auth
+AUTH_COOKIE_SECURE=true
+ADMIN_GROUP=admins
+AUTH_BYPASS=false
+AUTH_BYPASS_ROLE=admin
 
 # Server
 PORT=5999
@@ -727,21 +750,6 @@ HOST=0.0.0.0
 Travel patches can be managed via:
 1. **Settings Dialog** (recommended): Edit/create/delete patches in UI
 2. **Database Direct**: Stored in `app.db` table `travel_patches`
-3. **YAML File** (legacy): `data/travels.yml` for backward compatibility
-
-```yaml
-# Legacy format (travels.yml)
-"Address, Country":
-  title: "Custom Travel Title"
-  from: "2024-01-01T10:00:00Z"
-  to: "2024-01-15T18:00:00Z"
-  exclude: false
-```
-
-Migrate from YAML to database using the Settings dialog or:
-```bash
-curl -X POST http://localhost:5999/api/travel-patches/migrate
-```
 
 ## Performance
 
@@ -755,12 +763,10 @@ curl -X POST http://localhost:5999/api/travel-patches/migrate
 
 ## Security Features
 
-- **App Access Control:** Password-protected application access (`VUE_TRACCAR_PASSWORD`)
-- **Settings Protection:** Separate password for settings modification (`SETTINGS_PASSWORD`)
-- **SSO Support:** Forward-auth mode for enterprise authentication
+- **SSO Support:** Authelia forward-auth with JWT for API calls
+- **Admin-only Settings:** Configuration UI and settings endpoints restricted to admin role
 - **Sensitive Data:**
-  - Passwords hidden by default with toggle visibility
-  - API keys server-side only (never exposed to client)
+  - Settings secrets are visible to admins; use HTTPS in production
   - Configuration files excluded from git (`.gitignore`)
   - HTTPS recommended for production deployment
 - **Input Validation:** Server-side validation and prepared SQL statements

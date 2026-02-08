@@ -1,7 +1,7 @@
 # VueTraccarNuxt - Software Specification Document
 
-**Version:** 1.0.1
-**Last Updated:** 2026-02-07
+**Version:** 1.0.2
+**Last Updated:** 2026-02-08
 **Author:** Dieter Chvatal
 **Project Type:** GPS Tracking and Travel Management System
 
@@ -20,8 +20,9 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 - RST document management for location notes
 - Manual POI creation and management (Cmd/Ctrl+Click on map)
 - KML export for route sharing
-- Comprehensive settings management with password protection
+- Admin-only settings management (JWT-based)
 - Data export/import scripts for backup and portability
+- Authelia forward-auth with JWT authorization for API calls
 
 ---
 
@@ -82,7 +83,7 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  Data Layer                                      │   │
 │  │  • SQLite (route.db, app.db)                    │   │
-│  │  • YAML Config (settings.yml, travels.yml)     │   │
+│  │  • YAML Config (settings.yml)                   │   │
 │  │  • RST Files (documents/)                       │   │
 │  └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
@@ -188,13 +189,10 @@ interface StandstillPeriod {
 
 **Storage:**
 - SQLite database (app.db, travel_patches table)
-- YAML file (travels.yml) for backward compatibility
 
 **Features:**
 - Create/edit/delete patches via Settings UI
 - Fuzzy address matching (strips Plus Codes)
-- Migration from YAML to database
-- Priority: Database > YAML fallback
 
 **Data Structure:**
 ```typescript
@@ -337,7 +335,7 @@ interface KMLOptions {
 ### 4.7 Settings Management
 
 #### 4.7.1 Settings Architecture
-- **Primary Storage:** `data/settings.yml` (YAML)
+- **Primary Storage:** `data/settings.yml` (YAML, auto-created on first access)
 - **Database Storage:** `app.db` (SQLite, travel_patches only)
 - **Fallback:** Environment variables (.env)
 - **Override Priority:** settings.yml > .env > defaults
@@ -347,21 +345,21 @@ interface KMLOptions {
 **1. Traccar API Configuration**
 - URL (e.g., https://tracking.example.com)
 - Username (email)
-- Password (encrypted display)
+- Password (visible)
 - Device ID (dropdown selection)
 
 **2. Google Maps Configuration**
-- API Key (encrypted display)
+- API Key (visible)
+- Map ID (optional)
 
 **3. WordPress Integration**
 - WordPress URL
 - Username
-- Application Password (encrypted)
+- Application Password (visible)
 - Cache duration (seconds)
 
 **4. Application Settings**
-- Access password (app authentication)
-- Settings password (settings dialog protection)
+- Legacy app/settings password fields (not used for auth)
 - Home mode (boolean toggle)
 - Home latitude/longitude
 - Analysis parameters
@@ -385,20 +383,15 @@ interface KMLOptions {
 - Migrate from YAML
 
 #### 4.7.3 Settings UI Features
-- **Password Protection:**
-  - Unlock prompt on dialog open
-  - Server-side password verification
-  - Session-based authentication (resets on close)
+- **Access Control:** Admin-only (JWT-based)
 - **Field Types:**
-  - Text inputs (URLs, usernames)
-  - Password inputs (with eye icon toggle)
+  - Text inputs (URLs, usernames, secrets)
   - Number inputs (durations, thresholds)
   - Boolean toggles (switches)
   - Datetime pickers
   - Dropdowns (device/geofence selection)
 - **Validation:**
-  - API connectivity tests
-  - Required field validation
+  - Reject empty strings on save
   - Format validation (URLs, emails)
 - **User Feedback:**
   - Loading states
@@ -406,31 +399,29 @@ interface KMLOptions {
   - Confirmation dialogs (delete operations)
 
 #### 4.7.4 Settings Persistence Flow
-1. User opens Settings dialog
-2. Enters settings password
-3. System loads current settings from /api/settings
-4. System fetches dropdowns (devices, geofences)
-5. User modifies settings
-6. User clicks "Save All Settings"
-7. System posts to /api/settings
-8. Server writes to data/settings.yml
-9. On next app restart, settings.yml values override .env
+1. User opens Settings dialog (admin-only)
+2. System loads current settings from /api/settings (creates settings.yml if missing)
+3. System fetches dropdowns (devices, geofences)
+4. User modifies settings
+5. User clicks "Save All Settings"
+6. System posts to /api/settings
+7. Server writes to data/settings.yml
+8. On next app restart, settings.yml values override .env
 
 ### 4.8 Security Features
 
 #### 4.8.1 Authentication
-- **App Access:** Password-based (VUE_TRACCAR_PASSWORD)
-- **Settings Access:** Separate settings password (SETTINGS_PASSWORD)
-- **SSO Support:** Forward-auth mode (authenticated flag)
+- **SSO Support:** Authelia forward-auth
+- **API Authorization:** Short-lived JWT cookie for `/api/*`
+- **Role Enforcement:** Admin role required for Settings endpoints and UI
 
 #### 4.8.2 Sensitive Data Protection
-- **Password Display:** Hidden by default with toggle visibility
+- **Secrets Visibility:** Settings secrets are visible to admins; HTTPS required in production
 - **Git Ignore:**
   - `data/settings.yml`
-  - `data/travels.yml`
   - `data/cache/*.db`
   - Backup files (*~, *.bak)
-- **Server-Side Validation:** Password verification API endpoint
+- **Server-Side Validation:** Input validation with empty-string rejection
 
 #### 4.8.3 Configuration Security
 - **Environment Variables:** Never committed to git
@@ -440,6 +431,41 @@ interface KMLOptions {
 ---
 
 ## 5. API Specification
+
+### 5.0 Authentication Endpoints
+
+#### POST /api/auth/token
+**Description:** Issue JWT from Authelia forward-auth headers
+**Response:**
+```typescript
+{
+  authenticated: boolean
+  user: string
+  role: 'admin' | 'user'
+  exp: number
+}
+```
+
+#### GET /api/auth/me
+**Description:** Return current JWT auth status
+**Response:**
+```typescript
+{
+  authenticated: boolean
+  user?: string
+  role?: 'admin' | 'user'
+  exp?: number
+}
+```
+
+#### POST /api/auth/logout
+**Description:** Clear JWT auth cookie
+**Response:**
+```typescript
+{
+  success: boolean
+}
+```
 
 ### 5.1 GPS & Route Endpoints
 
@@ -631,21 +657,10 @@ interface KMLOptions {
 }
 ```
 
-#### POST /api/travel-patches/migrate
-**Description:** Migrate travel patches from YAML to database
-**Response:**
-```typescript
-{
-  success: boolean
-  migrated: number
-  message: string
-}
-```
-
 ### 5.4 Settings Endpoints
 
 #### GET /api/settings
-**Description:** Get all current settings
+**Description:** Get all current settings (admin-only)
 **Response:**
 ```typescript
 {
@@ -655,50 +670,40 @@ interface KMLOptions {
     traccarUser: string
     traccarPassword: string
     traccarDeviceId: number
+    traccarDeviceName: string
     googleMapsApiKey: string
+    googleMapsMapId: string
     wordpressUrl: string
     wordpressUser: string
     wordpressAppPassword: string
-    cacheDuration: number
+    wordpressCacheDuration: number
     vueTraccarPassword: string
     settingsPassword: string
     homeMode: boolean
     homeLatitude: string
     homeLongitude: string
     homeGeofenceId: number
+    homeGeofenceName: string
     eventMinGap: number
-    minTravelDays: number
-    maxTravelDays: number
-    standstillPeriod: number
-    analysisStartDate: string
+    minDays: number
+    maxDays: number
+    standPeriod: number
+    startDate: string
+    sideTripEnabled: boolean
+    sideTripDevices: Array<any>
+    sideTripBufferHours: number
   }
 }
 ```
 
 #### POST /api/settings
-**Description:** Save all settings to YAML file
+**Description:** Save all settings to YAML file (admin-only, rejects empty strings)
 **Request Body:** Same as GET response
 **Response:**
 ```typescript
 {
   success: boolean
   message: string
-}
-```
-
-#### POST /api/settings/verify-password
-**Description:** Verify settings password
-**Request Body:**
-```typescript
-{
-  password: string
-}
-```
-**Response:**
-```typescript
-{
-  success: boolean
-  valid: boolean
 }
 ```
 
@@ -892,35 +897,30 @@ CREATE INDEX idx_device_poi ON manual_pois(device_id, timestamp);
 ```yaml
 traccarUrl: "https://tracking.example.com"
 traccarUser: "user@example.com"
-traccarPassword: "encrypted_password"
+traccarPassword: "plain-text-password"
 traccarDeviceId: 4
 traccarDeviceName: "Family Tracker"
 googleMapsApiKey: "AIza..."
+googleMapsMapId: "abcd1234"
 wordpressUrl: "https://blog.example.com"
 wordpressUser: "username"
 wordpressAppPassword: "xxxx xxxx xxxx xxxx"
-cacheDuration: 3600
-vueTraccarPassword: "app_password"
-settingsPassword: "Admin2024"
+wordpressCacheDuration: 3600
+vueTraccarPassword: "legacy_app_password"
+settingsPassword: "legacy_settings_password"
 homeMode: false
 homeLatitude: "47.2692"
 homeLongitude: "11.4041"
 homeGeofenceId: 1
 homeGeofenceName: "Home"
 eventMinGap: 60
-minTravelDays: 2
-maxTravelDays: 170
-standstillPeriod: 12
-analysisStartDate: "2020-01-01T00:00:00Z"
-```
-
-#### travels.yml (Legacy, migrated to database)
-```yaml
-"Address, Country":
-  title: "Custom Travel Title"
-  von: "2024-01-01T10:00:00Z"
-  bis: "2024-01-15T18:00:00Z"
-  exclude: false
+minDays: 2
+maxDays: 170
+standPeriod: 12
+startDate: "2020-01-01T00:00:00Z"
+sideTripEnabled: false
+sideTripDevices: []
+sideTripBufferHours: 6
 ```
 
 ---
@@ -944,7 +944,6 @@ App.vue
 │   ├── Markers (standstills)
 │   └── Polylines (route)
 ├── SettingsDialog.vue (Configuration)
-│   ├── Password prompt
 │   ├── Traccar settings
 │   ├── Google Maps settings
 │   ├── WordPress settings
@@ -956,14 +955,14 @@ App.vue
 ├── MDEditorDialog.vue (Document editor)
 ├── MDDialog.vue (Markdown preview)
 ├── DebugDialog.vue (Developer tools)
-└── Login.vue (Authentication)
+└── Login.vue (Legacy, unused)
 ```
 
 ### 7.2 Key UI Features
 
 #### 7.2.1 AppBar
 - **Device Selector:** Dropdown to switch between GPS devices
-- **Menu:** Access to settings, about, cache management
+- **Menu:** Access to about and exports; admin-only items (POI Mode, Settings, Debug, Prefetch)
 - **Distance Display:** Current route distance in km
 - **Responsive:** Mobile-friendly hamburger menu
 
@@ -1019,12 +1018,9 @@ App.vue
   5. Home Geofence
   6. Route Analysis Parameters
   7. Travel Patches Management
-- **Password Protection:**
-  - Lock screen on open
-  - Eye icon for password visibility
-  - Server-side verification
+- **Access Control:** Admin-only (JWT-based)
+- **Secrets Visibility:** Secrets are displayed in plain text
 - **Travel Patches Panel:**
-  - Migrate from YAML button
   - Add new patch form
   - Patch list with edit/delete
   - Visual indicators (icons, colors)
@@ -1034,7 +1030,8 @@ App.vue
 - **Information:**
   - App name and version
   - Last commit date
-  - Key features list (9 highlights)
+  - Key features list (admin-only)
+  - Data management scripts list (admin-only)
   - Technology stack
 - **Links:**
   - GitHub repository
@@ -1132,7 +1129,7 @@ calculateBounds(positions): Bounds
 
 **Responsibilities:**
 - Analyze geofence events for travel periods
-- Load travel patches from database/YAML
+- Load travel patches from database
 - Calculate farthest standstill
 - Apply manual overrides
 - Generate travel list
@@ -1304,6 +1301,7 @@ TRACCAR_DEVICE_NAME=Family Tracker
 **Google Maps Settings:**
 ```
 NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
+NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=your-map-id
 ```
 
 **WordPress Settings:**
@@ -1316,8 +1314,8 @@ WORDPRESS_CACHE_DURATION=3600
 
 **Application Settings:**
 ```
-VUE_TRACCAR_PASSWORD=app_password
-SETTINGS_PASSWORD=Admin2024
+VUE_TRACCAR_PASSWORD=app_password # legacy, not used for auth
+SETTINGS_PASSWORD=Admin2024       # legacy, not used for auth
 HOME_MODE=false
 HOME_LATITUDE=47.2692
 HOME_LONGITUDE=11.4041
@@ -1328,10 +1326,23 @@ HOME_GEOFENCE_NAME=Home
 **Route Analysis Settings:**
 ```
 EVENT_MIN_GAP=60
-MIN_TRAVEL_DAYS=2
-MAX_TRAVEL_DAYS=170
-STANDSTILL_PERIOD=12
-ANALYSIS_START_DATE=2020-01-01T00:00:00Z
+MIN_DAYS=2
+MAX_DAYS=170
+STAND_PERIOD=12
+START_DATE=2020-01-01T00:00:00Z
+```
+
+**Auth Settings:**
+```
+JWT_SECRET=change-me
+JWT_TTL_SECONDS=3600
+JWT_ISSUER=vue-traccar
+JWT_AUDIENCE=vue-traccar-ui
+AUTH_COOKIE_NAME=vt_auth
+AUTH_COOKIE_SECURE=true
+ADMIN_GROUP=admins
+AUTH_BYPASS=false
+AUTH_BYPASS_ROLE=admin
 ```
 
 **Server Settings:**
@@ -1626,7 +1637,6 @@ describe('Haversine Distance', () => {
 
 5. **Settings:**
    - [ ] Open settings dialog
-   - [ ] Verify password protection
    - [ ] Change settings and save
    - [ ] Restart app, verify settings persisted
 
@@ -1636,7 +1646,6 @@ describe('Haversine Distance', () => {
    - [ ] Verify route and markers
 
 7. **Travel Patches:**
-   - [ ] Migrate from YAML
    - [ ] Add new patch
    - [ ] Edit existing patch
    - [ ] Delete patch
@@ -1699,7 +1708,6 @@ VueTraccarNuxt/
 │   │   ├── route.db (auto-created)
 │   │   └── app.db (auto-created)
 │   ├── settings.yml (auto-created)
-│   ├── travels.yml (optional, legacy)
 │   └── documents/ (create manually)
 ├── .output/ (build output)
 └── ... source files
@@ -1764,7 +1772,6 @@ certbot renew --dry-run
 
 **Critical Data:**
 - `data/settings.yml`
-- `data/travels.yml` (if used)
 - `data/cache/route.db`
 - `data/cache/app.db`
 - `data/documents/`
@@ -1949,7 +1956,7 @@ node scripts/import-timings.cjs timings-export.json --replace
 
 **export-travel-patches.cjs**
 
-Exports travel patch adjustments to YAML file matching the format of `data/travels.yml`.
+Exports travel patch adjustments to a standalone YAML file for backup/transfer.
 
 ```bash
 # Export to default location (data/travel-patches.yml)
@@ -2337,14 +2344,21 @@ CREATE TABLE manual_pois (
 
 ## 17. Change Log
 
+### Version 1.0.2 (2026-02-08)
+
+**Major Changes:**
+- ✅ JWT auth with Authelia forward-auth
+- ✅ Admin-only Settings UI and endpoints
+- ✅ Settings secrets visible in UI (TLS required in production)
+- ✅ Removed settings password verification and YAML migration endpoint
+- ✅ Admin-only menu items and About dialog sections
+
 ### Version 1.0.0 (2026-02-07)
 
 **Major Changes:**
 - ✅ Separated databases (route.db for caching, app.db for settings)
-- ✅ Removed sensitive files from git tracking (settings.yml, travels.yml)
+- ✅ Removed sensitive files from git tracking (settings.yml, databases)
 - ✅ Added travel patch editing functionality (✏️ edit button)
-- ✅ Implemented travel patches database migration from YAML
-- ✅ Added password protection to settings dialog
 - ✅ Settings management UI for all configuration
 - ✅ WordPress integration for standstill markers in KML
 - ✅ KML export with standstill locations
