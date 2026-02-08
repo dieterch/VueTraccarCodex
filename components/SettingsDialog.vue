@@ -56,14 +56,6 @@ const settings = ref({
   sideTripBufferHours: 6
 })
 
-// Password visibility toggles
-const showPassword = ref({
-  traccarPassword: false,
-  googleMapsApiKey: false,
-  wordpressAppPassword: false,
-  vueTraccarPassword: false
-})
-
 // Expansion panel state
 const expandedPanels = ref([0])
 
@@ -136,9 +128,15 @@ async function saveSettings() {
   successMessage.value = ''
 
   try {
+    const payload = { ...settings.value }
+    for (const [key, value] of Object.entries(payload)) {
+      if (typeof value === 'string' && value.trim() === '') {
+        delete payload[key]
+      }
+    }
     const response = await $fetch('/api/settings', {
       method: 'POST',
-      body: settings.value
+      body: payload
     })
 
     if (response.success) {
@@ -399,22 +397,6 @@ watch(() => configdialog.value, async (isOpen) => {
 
           <!-- Settings Form -->
           <div v-else>
-            <!-- Security Notice -->
-            <v-row>
-              <v-col cols="12">
-                <v-alert
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  icon="mdi-shield-lock"
-                >
-                  <div class="text-body-2">
-                    <strong>Security:</strong> Passwords and API keys are masked (••••••••) for protection. Leave them masked to keep current values, or enter new values to change them.
-                  </div>
-                </v-alert>
-              </v-col>
-            </v-row>
-
             <!-- Error Message -->
             <v-row v-if="errorMessage">
               <v-col cols="12">
@@ -482,11 +464,7 @@ watch(() => configdialog.value, async (isOpen) => {
                     variant="outlined"
                     density="comfortable"
                     prepend-inner-icon="mdi-lock"
-                    :type="showPassword.traccarPassword ? 'text' : 'password'"
-                    :append-inner-icon="showPassword.traccarPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append-inner="showPassword.traccarPassword = !showPassword.traccarPassword"
-                    :placeholder="settings.traccarPassword === '••••••••' ? 'Current password hidden - enter new password to change' : ''"
-                    hint="Leave masked value to keep current password, or enter new password to change"
+                    hint="Password for Traccar login"
                     persistent-hint
                     class="mb-3"
                   ></v-text-field>
@@ -530,11 +508,7 @@ watch(() => configdialog.value, async (isOpen) => {
                     variant="outlined"
                     density="comfortable"
                     prepend-inner-icon="mdi-key"
-                    :type="showPassword.googleMapsApiKey ? 'text' : 'password'"
-                    :append-inner-icon="showPassword.googleMapsApiKey ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append-inner="showPassword.googleMapsApiKey = !showPassword.googleMapsApiKey"
-                    :placeholder="settings.googleMapsApiKey === '••••••••' ? 'Current API key hidden - enter new key to change' : ''"
-                    hint="Leave masked value to keep current API key, or enter new key to change"
+                    hint="API key for Google Maps"
                     persistent-hint
                     class="mb-3"
                   ></v-text-field>
@@ -586,11 +560,7 @@ watch(() => configdialog.value, async (isOpen) => {
                     variant="outlined"
                     density="comfortable"
                     prepend-inner-icon="mdi-lock"
-                    :type="showPassword.wordpressAppPassword ? 'text' : 'password'"
-                    :append-inner-icon="showPassword.wordpressAppPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append-inner="showPassword.wordpressAppPassword = !showPassword.wordpressAppPassword"
-                    :placeholder="settings.wordpressAppPassword === '••••••••' ? 'Current password hidden - enter new password to change' : ''"
-                    hint="Leave masked value to keep current password, or enter new application password to change"
+                    hint="App password for WordPress"
                     persistent-hint
                     class="mb-3"
                   ></v-text-field>
@@ -621,11 +591,7 @@ watch(() => configdialog.value, async (isOpen) => {
                     variant="outlined"
                     density="comfortable"
                     prepend-inner-icon="mdi-lock"
-                    :type="showPassword.vueTraccarPassword ? 'text' : 'password'"
-                    :append-inner-icon="showPassword.vueTraccarPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append-inner="showPassword.vueTraccarPassword = !showPassword.vueTraccarPassword"
-                    :placeholder="settings.vueTraccarPassword === '••••••••' ? 'Current password hidden - enter new password to change' : ''"
-                    hint="Leave masked value to keep current password, or enter new password to change"
+                    hint="Password for app access"
                     persistent-hint
                     class="mb-3"
                   ></v-text-field>
@@ -1149,12 +1115,11 @@ watch(() => configdialog.value, async (isOpen) => {
         <v-btn
           variant="text"
           @click="configdialog = false"
-          :disabled="saving || verifyingPassword"
+          :disabled="saving"
         >
-          {{ isAuthenticated ? 'Cancel' : 'Close' }}
+          Close
         </v-btn>
         <v-btn
-          v-if="isAuthenticated"
           color="primary"
           variant="elevated"
           @click="saveSettings"
