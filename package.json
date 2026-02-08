@@ -1,0 +1,32 @@
+{
+  "name": "vue-traccar-nuxt",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^3.14.0",
+    "vue": "^3.5.0",
+    "vuetify": "^3.7.0",
+    "@mdi/font": "^7.4.47",
+    "vue3-google-map": "^0.27.0",
+    "better-sqlite3": "^11.0.0",
+    "axios": "^1.7.0",
+    "yaml": "^2.4.0",
+    "md-editor-v3": "^4.11.0",
+    "vue-loading-overlay": "^6.0.0",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/crypto-js": "^4.2.0",
+    "@nuxt/types": "^2.18.0"
+  }
+}

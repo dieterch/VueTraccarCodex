@@ -1,0 +1,42 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# SQLite cache files (can be deleted and rebuilt)
+data/cache/*.db
+data/cache/*.db-shm
+data/cache/*.db-wal
+
+# SQLite app database (persistent data - DO NOT DELETE)
+data/app.db
+data/app.db-shm
+data/app.db-wal
+
+# Sensitive configuration files (contain secrets)
+data/settings.yml
+data/travels.yml
+
+# Backup files
+data/*.bak
+data/*.backup
