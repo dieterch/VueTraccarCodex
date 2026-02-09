@@ -243,30 +243,30 @@ onMounted(async () => {
                 return-object
                 :menu-props="{ contentClass: 'travel-select-menu' }"
                 @update:model-value="update_travel"
-                class="mt-5 ml-6 mb-0 pb-0"
+                class="mt-5 ml-0 mb-0 pb-0"
             >
                 <template v-slot:selection="{ item }">
                     <div class="d-flex align-center">
-                        <span class="travel-icon-slot">
+                        <!--span class="travel-icon-slot">
                             <v-icon
                                 v-if="item.raw?.source === 'manual'"
                                 icon="mdi-hand"
                                 size="x-small"
                             ></v-icon>
-                        </span>
+                        </span-->
                         <span>{{ item.raw?.title || item.title }}</span>
                     </div>
                 </template>
                 <template v-slot:item="{ props, item }">
                     <v-list-item v-bind="props" :title="null" :subtitle="null">
                         <v-list-item-title class="d-flex align-center">
-                            <span class="travel-icon-slot">
+                            <!--span class="travel-icon-slot">
                                 <v-icon
                                     v-if="item.raw?.source === 'manual'"
                                     icon="mdi-hand"
                                     size="x-small"
                                 ></v-icon>
-                            </span>
+                            </span-->
                             <span>{{ item.raw?.title || item.title }}</span>
                         </v-list-item-title>
                     </v-list-item>
