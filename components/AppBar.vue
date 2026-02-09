@@ -256,7 +256,7 @@ onMounted(async () => {
                     </div>
                 </template>
                 <template v-slot:item="{ props, item }">
-                    <v-list-item v-bind="props">
+                    <v-list-item v-bind="props" :title="null" :subtitle="null">
                         <v-list-item-title class="d-flex align-center">
                             <v-icon
                                 v-if="item.raw?.source === 'manual'"

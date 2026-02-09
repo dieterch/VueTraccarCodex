@@ -43,6 +43,13 @@ export class TraccarService {
   }
 
   /**
+   * Fetch route data directly from Traccar without using cache or prefetch
+   */
+  async getRouteDirect(deviceId: number, from: string, to: string): Promise<any[]> {
+    return await this.client.getRoute(deviceId, from, to)
+  }
+
+  /**
    * Update cache with new data since last cached position
    */
   private async updateCache(deviceId: number): Promise<void> {

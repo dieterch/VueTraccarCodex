@@ -24,8 +24,9 @@ const { getDevices, getTravels, device } = useTraccar()
 
 const devices = ref<TraccarDevice[]>([])
 const selectedDeviceId = ref<number | null>(null)
+const manualTravels = ref<any[]>([])
 
-const fromInput = ref<string>('2019-03-01T00:00')
+const fromInput = ref<string>('2019-05-05T00:00')
 const toInput = ref<string>(new Date().toISOString().slice(0, 16))
 
 const rawPoints = ref<ManualPoint[]>([])
@@ -48,6 +49,7 @@ const historyIndex = ref<number>(-1)
 watch(manualtraveldialog, async (isOpen) => {
   if (!isOpen) return
   await loadDevices()
+  await loadManualTravels()
   if (!selectedDeviceId.value && device.value?.id) {
     selectedDeviceId.value = device.value.id
   }
@@ -98,6 +100,14 @@ async function loadDevices() {
   }
 }
 
+async function loadManualTravels() {
+  try {
+    manualTravels.value = await $fetch<any[]>('/api/manual-travels')
+  } catch (err: any) {
+    console.error('Failed to load manual travels:', err)
+  }
+}
+
 function parseInputDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
@@ -116,7 +126,7 @@ async function loadPoints() {
 
   loading.value = true
   try {
-    const route = await $fetch<any[]>('/api/route', {
+    const route = await $fetch<any[]>('/api/manual-route', {
       method: 'POST',
       body: {
         deviceId: selectedDeviceId.value,
@@ -262,12 +272,25 @@ async function saveTravel() {
     })
 
     await getTravels()
+    await loadManualTravels()
     manualtraveldialog.value = false
   } catch (err: any) {
     console.error('Failed to save manual travel:', err)
     error.value = 'Fehler beim Speichern der Reise.'
   } finally {
     saving.value = false
+  }
+}
+
+async function deleteManualTravel(id: string) {
+  if (!id) return
+  try {
+    await $fetch(`/api/manual-travels/${id}`, { method: 'DELETE' })
+    await getTravels()
+    await loadManualTravels()
+  } catch (err: any) {
+    console.error('Failed to delete manual travel:', err)
+    error.value = 'Fehler beim Loeschen der manuellen Reise.'
   }
 }
 
@@ -297,12 +320,44 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
       <v-toolbar color="grey-darken-3" density="compact">
         <v-toolbar-title>Manuelle Reise-Rekonstruktion</v-toolbar-title>
         <v-spacer></v-spacer>
+        <v-menu location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon="mdi-format-list-bulleted" size="small" v-bind="props"></v-btn>
+          </template>
+          <v-list density="compact" lines="one" class="manual-travel-list">
+            <v-list-item
+              v-for="item in manualTravels"
+              :key="item.id"
+              class="d-flex align-center"
+            >
+              <v-list-item-title>
+                {{ item.title }}
+                <span class="text-caption text-grey ml-2">
+                  ({{ item.from_date }} - {{ item.to_date }})
+                </span>
+              </v-list-item-title>
+              <template v-slot:append>
+                <v-btn
+                  icon="mdi-delete"
+                  size="x-small"
+                  color="error"
+                  @click="deleteManualTravel(item.id)"
+                ></v-btn>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="manualTravels.length === 0">
+              <v-list-item-title class="text-caption text-grey">
+                Keine manuellen Reisen gespeichert.
+              </v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
         <v-btn icon="mdi-close" @click="closeDialog"></v-btn>
       </v-toolbar>
 
-      <v-card-text class="pa-4">
-        <v-row class="mb-3" align="center">
-          <v-col cols="12" md="3">
+      <v-card-text class="pt-6">
+        <v-row class="mb-1 compact-row" align="center">
+          <v-col cols="12" md="3" class="compact-col">
             <v-select
               label="Gerät"
               :items="devices"
@@ -310,73 +365,85 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
               item-value="id"
               v-model="selectedDeviceId"
               density="compact"
+              variant="outlined"
+              hide-details
             ></v-select>
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="3" class="compact-col">
             <v-text-field
               label="Von"
               type="datetime-local"
               v-model="fromInput"
               density="compact"
+              variant="outlined"
+              hide-details
             ></v-text-field>
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="3" class="compact-col">
             <v-text-field
               label="Bis"
               type="datetime-local"
               v-model="toInput"
               density="compact"
+              variant="outlined"
+              hide-details
             ></v-text-field>
           </v-col>
-          <v-col cols="12" md="3" class="d-flex align-center">
-            <v-btn color="primary" @click="loadPoints" :loading="loading">Daten laden</v-btn>
-            <span class="ml-3 text-caption">Punkte: {{ pointsCount }}</span>
+          <v-col cols="12" md="3" class="d-flex align-center ga-2 compact-col">
+            <v-btn size="small" color="primary" @click="loadPoints" :loading="loading">Daten laden</v-btn>
+            <span class="text-caption">Punkte: {{ pointsCount }}</span>
           </v-col>
         </v-row>
 
-        <v-row class="mb-3" align="center">
-          <v-col cols="12" md="3">
+        <v-row class="mb-1 compact-row" align="center">
+          <v-col cols="12" md="3" class="compact-col">
             <v-text-field
               label="Titel"
               v-model="title"
               density="compact"
+              variant="outlined"
+              hide-details
             ></v-text-field>
           </v-col>
-          <v-col cols="12" md="5">
+          <v-col cols="12" md="6" class="compact-col">
             <v-textarea
               label="Notizen"
               v-model="notes"
               density="compact"
-              rows="2"
+              rows="1"
+              auto-grow
+              variant="outlined"
+              hide-details
             ></v-textarea>
           </v-col>
-          <v-col cols="12" md="4" class="d-flex align-center">
-            <v-btn color="success" @click="saveTravel" :loading="saving">Speichern</v-btn>
-            <span class="ml-3 text-caption">Auswahl: {{ selectedCount }}</span>
+          <v-col cols="12" md="3" class="d-flex align-center ga-2 compact-col">
+            <v-btn size="small" color="success" @click="saveTravel" :loading="saving">Speichern</v-btn>
+            <span class="text-caption">Auswahl: {{ selectedCount }}</span>
           </v-col>
         </v-row>
 
-        <v-row class="mb-3">
-          <v-col cols="12" md="12" class="d-flex flex-wrap align-center" style="gap: 8px;">
+        <v-row class="mb-2 compact-row">
+          <v-col cols="12" md="12" class="d-flex flex-wrap align-center ga-2 compact-col">
             <v-btn
+              size="small"
               :color="lassoMode ? 'warning' : 'grey-darken-1'"
               @click="lassoMode = !lassoMode"
             >
               {{ lassoMode ? 'Lasso aktiv' : 'Lasso' }}
             </v-btn>
-            <v-btn color="primary" @click="applyLassoSelection" :disabled="lassoPath.length < 3">
+            <v-btn size="small" color="primary" @click="applyLassoSelection" :disabled="lassoPath.length < 3">
               Auswahl anwenden
             </v-btn>
-            <v-btn color="grey-darken-1" @click="clearLasso">Lasso leeren</v-btn>
-            <v-btn color="error" @click="deleteSelection" :disabled="selectedCount === 0">
+            <v-btn size="small" color="grey-darken-1" @click="clearLasso">Lasso leeren</v-btn>
+            <v-btn size="small" color="error" @click="deleteSelection" :disabled="selectedCount === 0">
               Auswahl löschen
             </v-btn>
-            <v-btn color="info" @click="keepSelection" :disabled="selectedCount === 0">
+            <v-btn size="small" color="info" @click="keepSelection" :disabled="selectedCount === 0">
               Auswahl behalten
             </v-btn>
-            <v-btn color="grey-darken-2" @click="undo" :disabled="!canUndo">Undo</v-btn>
-            <v-btn color="grey-darken-2" @click="redo" :disabled="!canRedo">Redo</v-btn>
-            <v-btn color="grey-darken-3" @click="resetWorkspace">Zurücksetzen</v-btn>
+            <v-btn size="small" color="grey-darken-2" @click="undo" :disabled="!canUndo">Undo</v-btn>
+            <v-btn size="small" color="grey-darken-2" @click="redo" :disabled="!canRedo">Redo</v-btn>
+            <v-btn size="small" color="grey-darken-3" @click="resetWorkspace">Zurücksetzen</v-btn>
           </v-col>
         </v-row>
 
@@ -441,3 +508,20 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.manual-travel-list {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.compact-row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.compact-col {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+</style>

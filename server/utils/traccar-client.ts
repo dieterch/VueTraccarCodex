@@ -50,7 +50,6 @@ export class TraccarClient {
 
   async getRoute(deviceId: number, from: string, to: string): Promise<TraccarPosition[]> {
     try {
-      console.log(`Traccar API: getRoute device:${deviceId} from:${from} to:${to}`)
       const response = await $fetch<TraccarPosition[]>(`${this.baseUrl}/api/reports/route`, {
         headers: this.getHeaders(),
         params: {

@@ -196,8 +196,8 @@ export const useTraccar = () => {
   // Get devices
   const getDevices = async () => {
     try {
-      const data = await $fetch<TraccarDevice[]>('/api/devices')
-      return data
+      const data = await $fetch<{ success: boolean; devices: TraccarDevice[] }>('/api/devices')
+      return data.devices
     } catch (error) {
       console.error('Error fetching devices:', error)
       throw error

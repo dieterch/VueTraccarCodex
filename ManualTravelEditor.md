@@ -86,8 +86,8 @@ Liste aller manuellen Reisen.
     "id": "uuid",
     "title": "Portugal & Spanien 2019",
     "source_device_id": 12,
-    "from_date": "2019-03-01T00:00:00Z",
-    "to_date": "2019-05-10T00:00:00Z",
+    "from_date": "2019-05-05T00:00:00Z",
+    "to_date": "2019-06-10T00:00:00Z",
     "notes": "Rekonstruiert aus iPhone-Tracking",
     "created_at": "2026-02-09T12:00:00Z"
   }

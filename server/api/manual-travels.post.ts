@@ -2,6 +2,11 @@ import { randomUUID } from 'crypto'
 import { createManualTravel } from '../utils/app-db'
 
 export default defineEventHandler(async (event) => {
+  const auth = event.context.auth
+  if (!auth || auth.role !== 'admin') {
+    throw createError({ statusCode: 403, message: 'Admin access required' })
+  }
+
   try {
     const body = await readBody(event)
     const { title, source_device_id, from_date, to_date, notes } = body || {}
