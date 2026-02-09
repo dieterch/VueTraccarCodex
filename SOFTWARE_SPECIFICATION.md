@@ -19,7 +19,7 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 - WordPress blog integration for travel documentation
 - RST document management for location notes
 - Manual POI creation and management (Cmd/Ctrl+Click on map)
-- Manual travel editor for curated historic trips
+- Manual travel editor (manual reconstruction of historic trips)
 - KML export for route sharing
 - Admin-only settings management (JWT-based)
 - Data export/import scripts for backup and portability
@@ -221,8 +221,24 @@ interface Travel {
   tage: number                  // Duration in days
   address: string               // Farthest standstill address
   country: string
+  source?: 'auto' | 'manual'
+  deviceId?: number
+  notes?: string
+  created_at?: string
 }
 ```
+
+**Manual Travels:**
+- `source` is `manual`
+- Standstill-derived fields (e.g., `address`, `country`) may be absent
+- `notes` and `created_at` are provided from `manual_travels`
+
+#### 4.2.5 Manual Travel Editor
+- Manually reconstruct historical trips from raw GPS positions
+- Map-based lasso selection for deleting or keeping points
+- Manual travels are immutable once saved (delete/recreate only)
+- Stored in `app.db` (`manual_travels`, `manual_travel_positions`)
+- Displayed alongside auto travels with optional icon
 
 ### 4.3 Map Visualization
 
@@ -1963,6 +1979,7 @@ mkdir -p backups/$DATE
 node scripts/export-timings.cjs backups/$DATE/timings.json
 node scripts/export-travel-patches.cjs backups/$DATE/patches.yml
 node scripts/export-manual-pois.cjs backups/$DATE/pois.json
+node scripts/export-manual-travels.cjs backups/$DATE/manual-travels.json
 
 # Copy databases and documents
 cp data/cache/*.db backups/$DATE/
@@ -1991,6 +2008,7 @@ tar -xzf backup-20260207.tar.gz
 node scripts/import-timings.cjs backups/20260207/timings.json --replace
 node scripts/import-travel-patches.cjs backups/20260207/patches.yml --replace
 node scripts/import-manual-pois.cjs backups/20260207/pois.json --replace
+node scripts/import-manual-travels.cjs backups/20260207/manual-travels.json --replace
 
 # Restore databases and documents
 cp backups/20260207/*.db data/cache/
@@ -2227,7 +2245,52 @@ node scripts/import-manual-pois.cjs manual-pois-export.json --dry-run
 node scripts/import-manual-pois.cjs manual-pois-export.json --replace
 ```
 
-#### 14.3.5 Common Workflows
+#### 14.3.5 Manual Travel Scripts
+
+**export-manual-travels.cjs**
+
+Exports manual travels and their positions to JSON.
+
+```bash
+# Export all manual travels
+node scripts/export-manual-travels.cjs
+
+# Export a specific travel by ID
+node scripts/export-manual-travels.cjs <travel-id>
+
+# Export to a specific file
+node scripts/export-manual-travels.cjs <travel-id> manual-travel.json
+```
+
+**Output Format (single travel):**
+```json
+{
+  "meta": {
+    "source": "manual",
+    "created": "2026-02-09T12:00:00.000Z",
+    "database": "/path/to/app.db",
+    "count": 1
+  },
+  "travel": { "id": "uuid", "title": "Portugal & Spanien 2019" },
+  "positions": [ { "id": "uuid", "fix_time": "2019-03-01T00:00:00Z" } ]
+}
+```
+
+**import-manual-travels.cjs**
+
+Imports manual travels and their positions from JSON.
+
+```bash
+# Import and merge with existing data
+node scripts/import-manual-travels.cjs manual-travels-export.json
+
+# Preview import without making changes
+node scripts/import-manual-travels.cjs manual-travels-export.json --dry-run
+
+# Replace all existing manual travels
+node scripts/import-manual-travels.cjs manual-travels-export.json --replace
+```
+#### 14.3.6 Common Workflows
 
 **Complete Backup:**
 ```bash
@@ -2238,6 +2301,7 @@ mkdir -p backups/$(date +%Y%m%d)
 node scripts/export-timings.cjs backups/$(date +%Y%m%d)/timings.json
 node scripts/export-travel-patches.cjs backups/$(date +%Y%m%d)/patches.yml
 node scripts/export-manual-pois.cjs backups/$(date +%Y%m%d)/pois.json
+node scripts/export-manual-travels.cjs backups/$(date +%Y%m%d)/manual-travels.json
 
 # Archive databases and documents
 cp data/cache/*.db backups/$(date +%Y%m%d)/
@@ -2250,6 +2314,7 @@ cp -r data/documents backups/$(date +%Y%m%d)/
 node scripts/export-timings.cjs timings-transfer.json
 node scripts/export-travel-patches.cjs patches-transfer.yml
 node scripts/export-manual-pois.cjs pois-transfer.json
+node scripts/export-manual-travels.cjs manual-travels-transfer.json
 
 # Copy to target instance (example using scp)
 scp *-transfer.* user@target-server:/path/to/target/instance/
@@ -2258,6 +2323,7 @@ scp *-transfer.* user@target-server:/path/to/target/instance/
 node scripts/import-timings.cjs timings-transfer.json
 node scripts/import-travel-patches.cjs patches-transfer.yml
 node scripts/import-manual-pois.cjs pois-transfer.json
+node scripts/import-manual-travels.cjs manual-travels-transfer.json
 ```
 
 **Restore from Backup:**
@@ -2266,9 +2332,10 @@ node scripts/import-manual-pois.cjs pois-transfer.json
 node scripts/import-timings.cjs backups/20260207/timings.json --replace
 node scripts/import-travel-patches.cjs backups/20260207/patches.yml --replace
 node scripts/import-manual-pois.cjs backups/20260207/pois.json --replace
+node scripts/import-manual-travels.cjs backups/20260207/manual-travels.json --replace
 ```
 
-#### 14.3.6 Merge vs Replace Modes
+#### 14.3.7 Merge vs Replace Modes
 
 **Merge Mode (Default):**
 - Keeps existing records not in import file
@@ -2281,7 +2348,7 @@ node scripts/import-manual-pois.cjs backups/20260207/pois.json --replace
 - Imports all records from file
 - **Use when:** Complete replacement with imported dataset
 
-#### 14.3.7 Data Structures
+#### 14.3.8 Data Structures
 
 **Standstill Adjustments Table:**
 ```sql
@@ -2311,7 +2378,35 @@ CREATE TABLE manual_pois (
 );
 ```
 
-#### 14.3.8 Script Usage Notes
+**Manual Travels Table:**
+```sql
+CREATE TABLE manual_travels (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  source_device_id INTEGER NOT NULL,
+  from_date TEXT NOT NULL,
+  to_date TEXT NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+**Manual Travel Positions Table:**
+```sql
+CREATE TABLE manual_travel_positions (
+  id TEXT PRIMARY KEY,
+  travel_id TEXT NOT NULL,
+  fix_time TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  speed REAL,
+  altitude REAL,
+  attributes TEXT,
+  FOREIGN KEY (travel_id) REFERENCES manual_travels(id)
+);
+```
+
+#### 14.3.9 Script Usage Notes
 
 **Requirements:**
 - Node.js 14+
@@ -2520,6 +2615,15 @@ CREATE TABLE manual_pois (
 ---
 
 ## 17. Change Log
+
+### Version 1.0.3 (2026-02-09)
+
+**Major Changes:**
+- ✅ Manual travel editor with map-based lasso selection
+- ✅ Manual travel persistence in `app.db` (`manual_travels`, `manual_travel_positions`)
+- ✅ Manual travel API endpoints and workspace endpoints
+- ✅ Manual travel export/import scripts
+- ✅ Manual travels integrated into travel list, map rendering, and KML export
 
 ### Version 1.0.2 (2026-02-08)
 
