@@ -241,6 +241,7 @@ onMounted(async () => {
                 :items="travels"
                 item-title="title"
                 return-object
+                :menu-props="{ contentClass: 'travel-select-menu' }"
                 @update:model-value="update_travel"
                 class="mt-5 ml-6 mb-0 pb-0"
             >
@@ -374,11 +375,15 @@ onMounted(async () => {
   }
 }
 .travel-icon-slot {
-  width: 18px;
+  width: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-right: 6px;
-  flex: 0 0 18px;
+  margin-right: 4px;
+  flex: 0 0 14px;
+}
+
+:deep(.travel-select-menu .v-list-item__content) {
+  padding-inline-start: 0;
 }
 </style>
