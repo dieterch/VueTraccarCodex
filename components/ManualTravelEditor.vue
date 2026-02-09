@@ -79,11 +79,18 @@ const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 const selectedCount = computed(() => selectedPointIds.value.length)
 const pointsCount = computed(() => currentPoints.value.length)
 
-const mapCenter = computed(() => {
-  if (currentPoints.value.length === 0) return { lat: 0, lng: 0 }
-  const mid = currentPoints.value[Math.floor(currentPoints.value.length / 2)]
-  return { lat: mid.latitude, lng: mid.longitude }
-})
+const mapRef = ref<any>(null)
+const mapCenter = ref<{ lat: number; lng: number }>({ lat: 0, lng: 0 })
+const mapZoom = ref<number>(6)
+
+function setMapToPoints(points: ManualPoint[]) {
+  if (points.length === 0) {
+    mapCenter.value = { lat: 0, lng: 0 }
+    return
+  }
+  const mid = points[Math.floor(points.length / 2)]
+  mapCenter.value = { lat: mid.latitude, lng: mid.longitude }
+}
 
 const polylinePath = computed(() => currentPoints.value.map(p => ({ lat: p.latitude, lng: p.longitude })))
 
@@ -162,6 +169,8 @@ async function loadPoints() {
     selectedPointIds.value = []
     lassoPath.value = []
     resetHistory(points)
+    setMapToPoints(points)
+    mapZoom.value = 6
   } catch (err: any) {
     console.error('Failed to load points:', err)
     error.value = 'Fehler beim Laden der Positionsdaten.'
@@ -198,6 +207,8 @@ async function loadManualTravel(item: any) {
     selectedPointIds.value = []
     lassoPath.value = []
     resetHistory(points)
+    setMapToPoints(points)
+    mapZoom.value = 6
   } catch (err: any) {
     console.error('Failed to load manual travel:', err)
     error.value = 'Fehler beim Laden der manuellen Reise.'
@@ -250,6 +261,8 @@ function resetWorkspace() {
   selectedPointIds.value = []
   lassoPath.value = []
   resetHistory(currentPoints.value)
+  setMapToPoints(currentPoints.value)
+  mapZoom.value = 6
 }
 
 function undo() {
@@ -379,6 +392,19 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
     if (intersect) inside = !inside
   }
   return inside
+}
+
+function syncMapView() {
+  const map = mapRef.value?.map
+  if (!map) return
+  const center = map.getCenter?.()
+  if (center) {
+    mapCenter.value = { lat: center.lat(), lng: center.lng() }
+  }
+  const zoom = map.getZoom?.()
+  if (typeof zoom === 'number') {
+    mapZoom.value = zoom
+  }
 }
 </script>
 
@@ -534,12 +560,14 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
 
         <div style="height: 70vh; width: 100%;">
           <GoogleMap
+            ref="mapRef"
             :api-key="mapsApiKey"
             :map-id="mapsMapId"
             :center="mapCenter"
-            :zoom="6"
+            :zoom="mapZoom"
             style="height: 100%; width: 100%;"
             @click="onMapClick"
+            @idle="syncMapView"
           >
             <Polyline
               v-if="polylinePath.length > 0"
