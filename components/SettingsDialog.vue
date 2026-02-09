@@ -934,16 +934,7 @@ watch(() => configdialog.value, async (isOpen) => {
                           persistent-hint
                           class="mb-3"
                           :readonly="!!editingSideTripDevice"
-                        >
-                          <template v-slot:item="{ props, item }">
-                            <v-list-item v-bind="props">
-                              <template v-slot:prepend>
-                                <v-icon icon="mdi-cellphone-link" class="mr-2"></v-icon>
-                              </template>
-                              <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
-                            </v-list-item>
-                          </template>
-                        </v-select>
+                        ></v-select>
 
                         <v-text-field
                           v-model="newSideTripDevice.color"
