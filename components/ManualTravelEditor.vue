@@ -25,6 +25,7 @@ const { getDevices, getTravels, device } = useTraccar()
 const devices = ref<TraccarDevice[]>([])
 const selectedDeviceId = ref<number | null>(null)
 const manualTravels = ref<any[]>([])
+const editingTravelId = ref<string | null>(null)
 
 const fromInput = ref<string>('2019-05-05T00:00')
 const toInput = ref<string>(new Date().toISOString().slice(0, 16))
@@ -126,6 +127,7 @@ function formatTravelDate(value: string) {
 
 async function loadPoints() {
   error.value = null
+  editingTravelId.value = null
   const fromDate = parseInputDate(fromInput.value)
   const toDate = parseInputDate(toInput.value)
 
@@ -184,6 +186,7 @@ async function loadManualTravel(item: any) {
       attributes: pos.attributes || {}
     }))
 
+    editingTravelId.value = String(item.id)
     title.value = item.title || ''
     notes.value = item.notes || ''
     selectedDeviceId.value = Number(item.source_device_id || item.sourceDeviceId || selectedDeviceId.value)
@@ -290,18 +293,34 @@ async function saveTravel() {
     const fromDate = minMax?.from || new Date(fromInput.value).toISOString()
     const toDate = minMax?.to || new Date(toInput.value).toISOString()
 
-    const createResponse = await $fetch<{ id: string }>('/api/manual-travels', {
-      method: 'POST',
-      body: {
-        title: title.value.trim(),
-        source_device_id: selectedDeviceId.value,
-        from_date: fromDate,
-        to_date: toDate,
-        notes: notes.value.trim() || null
-      }
-    })
+    let travelId = editingTravelId.value
+    if (travelId) {
+      await $fetch(`/api/manual-travels/${travelId}`, {
+        method: 'PATCH',
+        body: {
+          title: title.value.trim(),
+          source_device_id: selectedDeviceId.value,
+          from_date: fromDate,
+          to_date: toDate,
+          notes: notes.value.trim() || null
+        }
+      })
+    } else {
+      const createResponse = await $fetch<{ id: string }>('/api/manual-travels', {
+        method: 'POST',
+        body: {
+          title: title.value.trim(),
+          source_device_id: selectedDeviceId.value,
+          from_date: fromDate,
+          to_date: toDate,
+          notes: notes.value.trim() || null
+        }
+      })
+      travelId = createResponse.id
+      editingTravelId.value = travelId
+    }
 
-    await $fetch(`/api/manual-travels/${createResponse.id}/positions`, {
+    await $fetch(`/api/manual-travels/${travelId}/positions`, {
       method: 'POST',
       body: {
         positions: currentPoints.value.map(p => ({
@@ -333,6 +352,9 @@ async function deleteManualTravel(id: string) {
     await $fetch(`/api/manual-travels/${id}`, { method: 'DELETE' })
     await getTravels()
     await loadManualTravels()
+    if (editingTravelId.value === id) {
+      editingTravelId.value = null
+    }
   } catch (err: any) {
     console.error('Failed to delete manual travel:', err)
     error.value = 'Fehler beim Loeschen der manuellen Reise.'
@@ -340,6 +362,7 @@ async function deleteManualTravel(id: string) {
 }
 
 function closeDialog() {
+  editingTravelId.value = null
   manualtraveldialog.value = false
 }
 

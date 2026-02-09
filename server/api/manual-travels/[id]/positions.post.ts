@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const normalized = positions.map((pos: any) => ({
-      id: pos.id ? String(pos.id) : randomUUID(),
+      id: randomUUID(),
       fixTime: pos.fixTime || pos.fix_time,
       latitude: Number(pos.latitude),
       longitude: Number(pos.longitude),

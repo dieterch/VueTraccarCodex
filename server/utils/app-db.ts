@@ -331,6 +331,30 @@ export function createManualTravel(travel: {
   )
 }
 
+export function updateManualTravel(travel: {
+  id: string
+  title: string
+  sourceDeviceId: number
+  fromDate: string
+  toDate: string
+  notes?: string
+}): number {
+  const database = getAppDb()
+  const result = database.prepare(`
+    UPDATE manual_travels
+    SET title = ?, source_device_id = ?, from_date = ?, to_date = ?, notes = ?
+    WHERE id = ?
+  `).run(
+    travel.title,
+    travel.sourceDeviceId,
+    travel.fromDate,
+    travel.toDate,
+    travel.notes || null,
+    travel.id
+  )
+  return result.changes || 0
+}
+
 export function deleteManualTravel(travelId: string): void {
   const database = getAppDb()
   const transaction = database.transaction(() => {
