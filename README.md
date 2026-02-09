@@ -16,6 +16,7 @@ Modern Nuxt 3 rewrite of VueTraccar with TypeScript backend, replacing Python/Qu
 - 📝 **WordPress Integration** for travel blogs
 - 📄 **RST Document Management** for location notes
 - 📍 **Manual POI Creation** (Cmd/Ctrl+Click on map)
+- ✍️ **Manual Travel Editor** for curated historic trips
 - 🎯 **POI Mode** for independent point-of-interest markers
 - 📥 **KML Export** for route sharing (Google Earth compatible)
 - 🔐 **JWT Authorization** for API access (Authelia forward-auth integration)
@@ -67,7 +68,8 @@ VueTraccarCodex/
 │   │   ├── travel-analyzer.ts      # Travel detection & patches
 │   │   ├── wordpress.service.ts    # WordPress API client
 │   │   ├── document-manager.ts     # RST document handling
-│   │   └── kml-generator.ts        # KML export generation
+│   │   ├── kml-generator.ts        # KML export generation
+│   │   └── manual-travel-workspace.ts # Manual travel workspace (optional)
 │   └── utils/            # Server utilities
 │       ├── cache.ts                # route.db operations
 │       ├── app-db.ts               # app.db operations
@@ -96,11 +98,13 @@ VueTraccarCodex/
 │   ├── export-travel-patches.cjs   # Export travel patches
 │   ├── import-travel-patches.cjs   # Import travel patches
 │   ├── export-manual-pois.cjs      # Export manual POIs
-│   └── import-manual-pois.cjs      # Import manual POIs
+│   ├── import-manual-pois.cjs      # Import manual POIs
+│   ├── export-manual-travels.cjs   # Export manual travels
+│   └── import-manual-travels.cjs   # Import manual travels
 ├── data/
 │   ├── cache/            # SQLite databases (not in git)
 │   │   ├── route.db      # GPS positions, standstills, events
-│   │   └── app.db        # Travel patches, settings, manual POIs
+│   │   └── app.db        # Travel patches, settings, manual POIs, manual travels
 │   ├── documents/        # RST travel notes (create manually)
 │   ├── settings.yml      # Runtime configuration (not in git)
 ├── types/                # TypeScript definitions
@@ -308,6 +312,14 @@ Notes:
 4. POI is created with automatic geocoding
 5. POIs are saved to `app.db` and can be exported
 
+#### Manual Travel Editor
+1. Open menu → **Manual Travel** (admin-only)
+2. Select device + time range and click **Daten laden**
+3. Use **Lasso** to select points, then **Auswahl löschen** or **Auswahl behalten**
+4. Optional: Undo/Redo or Reset
+5. Enter title/notes and click **Speichern**
+6. Manual travels appear in the travel dropdown with a hand icon
+
 #### Managing Settings
 1. Click menu icon (three dots) in AppBar
 2. Select "Settings" (admin-only)
@@ -375,6 +387,18 @@ Notes:
 - `POST /api/travels` - Analyze travels from geofence events
 - `POST /api/download.kml` - Generate KML export
 
+### Manual Travels
+- `GET /api/manual-travels` - List manual travels
+- `POST /api/manual-travels` - Create manual travel
+- `DELETE /api/manual-travels/[id]` - Delete manual travel
+- `GET /api/manual-travels/[id]/positions` - List positions
+- `POST /api/manual-travels/[id]/positions` - Replace positions
+- `POST /api/manual-travel-workspace/open` - Open workspace (optional)
+- `POST /api/manual-travel-workspace/delete` - Delete selection (optional)
+- `POST /api/manual-travel-workspace/keep` - Keep selection (optional)
+- `POST /api/manual-travel-workspace/reset` - Reset workspace (optional)
+- `POST /api/manual-travel-workspace/finalize` - Finalize workspace (optional)
+
 ### Travel Patches
 - `GET /api/travel-patches` - List all travel patches
 - `POST /api/travel-patches` - Create or update a travel patch
@@ -422,7 +446,7 @@ Notes:
 ### Caching Strategy
 - Dual SQLite databases:
   - `route.db` - GPS positions, standstills, geofence events
-  - `app.db` - Travel patches, settings, manual POIs
+  - `app.db` - Travel patches, settings, manual POIs, manual travels
 - Cache-first with incremental updates
 - SQLite WAL mode for concurrent read performance
 - Automatic prefetch on startup
@@ -451,10 +475,11 @@ Notes:
 
 ### Data Management & Portability
 - Export/import scripts for backup and transfer
-- Three data types supported:
+- Four data types supported:
   - **Standstill timing adjustments** (JSON format)
   - **Travel patches** (YAML format)
   - **Manual POIs** (JSON format)
+  - **Manual Travels** (JSON format)
 - Merge and replace modes for imports
 - Dry-run preview capability
 - Complete backup/restore workflows
@@ -475,6 +500,9 @@ node scripts/export-travel-patches.cjs [output-file.yml]
 
 # Export manual POIs
 node scripts/export-manual-pois.cjs [output-file.json]
+
+# Export manual travels
+node scripts/export-manual-travels.cjs [travel-id] [output-file.json]
 ```
 
 ### Import Scripts
@@ -491,7 +519,7 @@ node scripts/import-timings.cjs timings.json --dry-run
 node scripts/import-timings.cjs timings.json --replace
 ```
 
-Same options apply to `import-travel-patches.cjs` and `import-manual-pois.cjs`.
+Same options apply to `import-travel-patches.cjs`, `import-manual-pois.cjs`, and `import-manual-travels.cjs`.
 
 ### Complete Backup Workflow
 
@@ -503,6 +531,7 @@ mkdir -p backups/$(date +%Y%m%d)
 node scripts/export-timings.cjs backups/$(date +%Y%m%d)/timings.json
 node scripts/export-travel-patches.cjs backups/$(date +%Y%m%d)/patches.yml
 node scripts/export-manual-pois.cjs backups/$(date +%Y%m%d)/pois.json
+node scripts/export-manual-travels.cjs backups/$(date +%Y%m%d)/manual-travels.json
 
 # Copy databases and documents
 cp data/cache/*.db backups/$(date +%Y%m%d)/
@@ -517,6 +546,7 @@ cp data/settings.yml backups/$(date +%Y%m%d)/ 2>/dev/null || true
 node scripts/import-timings.cjs backups/20260207/timings.json --replace
 node scripts/import-travel-patches.cjs backups/20260207/patches.yml --replace
 node scripts/import-manual-pois.cjs backups/20260207/pois.json --replace
+node scripts/import-manual-travels.cjs backups/20260207/manual-travels.json --replace
 
 # Restore databases and documents
 cp backups/20260207/*.db data/cache/
@@ -748,6 +778,8 @@ HOST=0.0.0.0
 - `travel_patches` - Manual travel overrides
 - `standstill_adjustments` - Timing adjustments for standstills
 - `manual_pois` - User-created points of interest
+- `manual_travels` - Manually curated travels
+- `manual_travel_positions` - Positions for manual travels
 
 ### Travel Patches
 

@@ -11,6 +11,8 @@ These scripts allow you to:
 - **Import** travel patch adjustments from a YML file into the database
 - **Export** manual POIs from the database to a JSON file
 - **Import** manual POIs from a JSON file into the database
+- **Export** manual travels (and their positions) from the database to a JSON file
+- **Import** manual travels (and their positions) from a JSON file into the database
 - Transfer data between different application instances
 - Backup and restore data
 
@@ -262,6 +264,84 @@ The input JSON file should match the export format:
 }
 ```
 
+### export-manual-travels.cjs
+
+Exports manual travels and their positions from the database to a JSON file.
+
+**Usage:**
+```bash
+node scripts/export-manual-travels.cjs [travel-id] [output-file]
+```
+
+**Examples:**
+```bash
+# Export all manual travels to a timestamped file (default)
+node scripts/export-manual-travels.cjs
+
+# Export a single travel by ID
+node scripts/export-manual-travels.cjs 123e4567-e89b-12d3-a456-426614174000
+
+# Export to a specific file
+node scripts/export-manual-travels.cjs 123e4567-e89b-12d3-a456-426614174000 manual-travel.json
+```
+
+**Output Format (single travel):**
+```json
+{
+  "meta": {
+    "source": "manual",
+    "created": "2026-02-09T12:00:00.000Z",
+    "database": "/path/to/app.db",
+    "count": 1
+  },
+  "travel": { "id": "uuid", "title": "Portugal & Spanien 2019" },
+  "positions": [ { "id": "uuid", "fix_time": "2019-03-01T00:00:00Z" } ]
+}
+```
+
+**Output Format (all travels):**
+```json
+{
+  "meta": {
+    "source": "manual",
+    "created": "2026-02-09T12:00:00.000Z",
+    "database": "/path/to/app.db",
+    "count": 2
+  },
+  "travels": [
+    {
+      "travel": { "id": "uuid", "title": "Portugal & Spanien 2019" },
+      "positions": [ { "id": "uuid", "fix_time": "2019-03-01T00:00:00Z" } ]
+    }
+  ]
+}
+```
+
+### import-manual-travels.cjs
+
+Imports manual travels and their positions from a JSON file into the database.
+
+**Usage:**
+```bash
+node scripts/import-manual-travels.cjs <input-file> [options]
+```
+
+**Options:**
+- `--dry-run` - Show what would be imported without making changes
+- `--replace` - Delete all existing manual travels before import
+
+**Examples:**
+```bash
+# Import and merge with existing data (default)
+node scripts/import-manual-travels.cjs manual-travels-export.json
+
+# Preview import without making changes
+node scripts/import-manual-travels.cjs manual-travels-export.json --dry-run
+
+# Replace all existing manual travels
+node scripts/import-manual-travels.cjs manual-travels-export.json --replace
+```
+
 ## Typical Workflows
 
 ### Backing Up Travel Patches
@@ -368,6 +448,9 @@ node scripts/import-timings.cjs backup-20260206.json --replace
 
 # Restore manual POIs from backup
 node scripts/import-manual-pois.cjs manual-pois-backup-20260206.json --replace
+
+# Restore manual travels from backup
+node scripts/import-manual-travels.cjs manual-travels-backup-20260206.json --replace
 ```
 
 ## Data Structures
@@ -418,6 +501,35 @@ The manual POI scripts work with the `manual_pois` table which has the following
 | `updated_at` | TEXT | ISO timestamp of last update |
 
 **Note:** Manual POIs are independent points of interest created by users (e.g., via Cmd/Ctrl+Click on the map) and are not associated with device trips.
+
+### Manual Travels
+
+The manual travel scripts work with two tables: `manual_travels` and `manual_travel_positions`.
+
+**manual_travels**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `title` | TEXT | Travel title |
+| `source_device_id` | INTEGER | Source device ID |
+| `from_date` | TEXT | Start timestamp (ISO) |
+| `to_date` | TEXT | End timestamp (ISO) |
+| `notes` | TEXT | Optional notes |
+| `created_at` | TEXT | Creation timestamp |
+
+**manual_travel_positions**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | TEXT | UUID primary key |
+| `travel_id` | TEXT | Foreign key to manual_travels |
+| `fix_time` | TEXT | Timestamp of the position |
+| `latitude` | REAL | Latitude |
+| `longitude` | REAL | Longitude |
+| `speed` | REAL | Speed |
+| `altitude` | REAL | Altitude |
+| `attributes` | TEXT | JSON attributes (string) |
 
 ## Merge vs Replace Mode
 

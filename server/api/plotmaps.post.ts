@@ -5,14 +5,16 @@ import {
   calculateZoom,
   filterStandstillPeriods,
   cleanStandstillPeriods,
-  translateCountry
+  translateCountry,
+  calculateDistance
 } from '../services/route-analyzer'
+import { getManualTravel, getManualTravelPositions } from '../utils/app-db'
 import type { PlotMapsResponse, MapMarker, DevicePolyline } from '~/types/traccar'
 
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event)
-    const { deviceId, from, to } = body
+    const { deviceId, from, to, travelSource, travelId } = body
 
     console.log('🔍 /api/plotmaps called with:')
     console.log(`   Device ID: ${deviceId}`)
@@ -28,8 +30,12 @@ export default defineEventHandler(async (event) => {
 
     const traccarService = createTraccarService()
 
+    const isManual = travelSource === 'manual' && travelId
+
     // Get main device route data
-    const route = await traccarService.getRouteData(deviceId, from, to)
+    const route = isManual
+      ? buildManualRoute(travelId)
+      : await traccarService.getRouteData(deviceId, from, to)
 
     if (route.length === 0) {
       return {
@@ -58,33 +64,39 @@ export default defineEventHandler(async (event) => {
       timestamp: p.fixTime
     }))
 
-    // Get standstill periods for main device
-    let standstills = await traccarService.getStandstillPeriods(deviceId)
+    let locations: MapMarker[] = []
+    if (!isManual) {
+      // Get standstill periods for main device
+      let standstills = await traccarService.getStandstillPeriods(deviceId)
 
-    // Filter by time range
-    standstills = filterStandstillPeriods(standstills, from, to)
+      // Filter by time range
+      standstills = filterStandstillPeriods(standstills, from, to)
 
-    // Clean/merge nearby standstills
-    standstills = cleanStandstillPeriods(standstills)
+      // Clean/merge nearby standstills
+      standstills = cleanStandstillPeriods(standstills)
 
-    // Convert to markers
-    const locations: MapMarker[] = standstills.map(s => ({
-      key: s.key,
-      lat: s.latitude,
-      lng: s.longitude,
-      title: translateCountry(s.country),
-      von: s.von,
-      bis: s.bis,
-      period: s.period,
-      country: translateCountry(s.country),
-      address: s.address
-    }))
+      // Convert to markers
+      locations = standstills.map(s => ({
+        key: s.key,
+        lat: s.latitude,
+        lng: s.longitude,
+        title: translateCountry(s.country),
+        von: s.von,
+        bis: s.bis,
+        period: s.period,
+        country: translateCountry(s.country),
+        address: s.address
+      }))
+    }
 
     // Get main device name
     let mainDeviceName = 'Main Device'
     try {
       const devices = await traccarService.getDevices()
-      const mainDevice = devices.find(d => d.id === deviceId)
+      const mainDeviceId = isManual && route.length > 0
+        ? route[0].deviceId
+        : deviceId
+      const mainDevice = devices.find(d => d.id === mainDeviceId)
       if (mainDevice) {
         mainDeviceName = mainDevice.name
       }
@@ -94,7 +106,7 @@ export default defineEventHandler(async (event) => {
 
     // Create polylines array with only main device route
     const polylines: DevicePolyline[] = [{
-      deviceId,
+      deviceId: route[0]?.deviceId || deviceId,
       deviceName: mainDeviceName,
       color: '#FF0000', // Red for main device
       lineWeight: 2,
@@ -121,3 +133,43 @@ export default defineEventHandler(async (event) => {
     })
   }
 })
+
+function buildManualRoute(travelId: string) {
+  const manualTravel = getManualTravel(travelId)
+  if (!manualTravel) return []
+
+  const positions = getManualTravelPositions(travelId)
+  if (positions.length === 0) return []
+
+  let totalDistance = 0
+  const route = positions.map((pos: any, index: number) => {
+    if (index > 0) {
+      totalDistance += calculateDistance(
+        { latitude: positions[index - 1].latitude, longitude: positions[index - 1].longitude },
+        { latitude: pos.latitude, longitude: pos.longitude }
+      )
+    }
+
+    return {
+      id: pos.id,
+      deviceId: manualTravel.source_device_id,
+      fixTime: pos.fix_time,
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      altitude: pos.altitude || 0,
+      speed: pos.speed || 0,
+      totalDistance,
+      attributes: pos.attributes ? safeParseJson(pos.attributes) : {}
+    }
+  })
+
+  return route
+}
+
+function safeParseJson(value: string) {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return {}
+  }
+}

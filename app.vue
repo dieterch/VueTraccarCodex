@@ -48,6 +48,7 @@ onMounted(async () => {
         <DebugDialog />
         <SettingsDialog />
         <AboutDialog />
+        <ManualTravelEditor />
         <GMap v-if="togglemap" :key="polygone" />
         <pre v-if="toggletravels">
 Reise {{ travel }}

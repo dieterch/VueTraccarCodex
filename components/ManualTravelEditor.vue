@@ -1,0 +1,443 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { GoogleMap, Polyline, Polygon, Marker } from 'vue3-google-map'
+import { useMapData } from '~/composables/useMapData'
+import { useTraccar } from '~/composables/useTraccar'
+import type { TraccarDevice } from '~/types/traccar'
+
+type ManualPoint = {
+  id: string
+  fixTime: string
+  latitude: number
+  longitude: number
+  speed?: number
+  altitude?: number
+  attributes?: Record<string, any>
+}
+
+const config = useRuntimeConfig()
+const mapsApiKey = config.public.googleMapsApiKey
+const mapsMapId = config.public.googleMapsMapId
+
+const { manualtraveldialog } = useMapData()
+const { getDevices, getTravels, device } = useTraccar()
+
+const devices = ref<TraccarDevice[]>([])
+const selectedDeviceId = ref<number | null>(null)
+
+const fromInput = ref<string>('2019-03-01T00:00')
+const toInput = ref<string>(new Date().toISOString().slice(0, 16))
+
+const rawPoints = ref<ManualPoint[]>([])
+const currentPoints = ref<ManualPoint[]>([])
+const selectedPointIds = ref<string[]>([])
+
+const title = ref<string>('')
+const notes = ref<string>('')
+
+const lassoMode = ref(false)
+const lassoPath = ref<Array<{ lat: number; lng: number }>>([])
+
+const loading = ref(false)
+const saving = ref(false)
+const error = ref<string | null>(null)
+
+const history = ref<ManualPoint[][]>([])
+const historyIndex = ref<number>(-1)
+
+watch(manualtraveldialog, async (isOpen) => {
+  if (!isOpen) return
+  await loadDevices()
+  if (!selectedDeviceId.value && device.value?.id) {
+    selectedDeviceId.value = device.value.id
+  }
+})
+
+function clonePoints(points: ManualPoint[]) {
+  return points.map(p => ({ ...p }))
+}
+
+function resetHistory(points: ManualPoint[]) {
+  history.value = [clonePoints(points)]
+  historyIndex.value = points.length ? 0 : -1
+}
+
+function pushHistory(points: ManualPoint[]) {
+  if (historyIndex.value < history.value.length - 1) {
+    history.value = history.value.slice(0, historyIndex.value + 1)
+  }
+  history.value.push(clonePoints(points))
+  historyIndex.value = history.value.length - 1
+}
+
+const canUndo = computed(() => historyIndex.value > 0)
+const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+
+const selectedCount = computed(() => selectedPointIds.value.length)
+const pointsCount = computed(() => currentPoints.value.length)
+
+const mapCenter = computed(() => {
+  if (currentPoints.value.length === 0) return { lat: 0, lng: 0 }
+  const mid = currentPoints.value[Math.floor(currentPoints.value.length / 2)]
+  return { lat: mid.latitude, lng: mid.longitude }
+})
+
+const polylinePath = computed(() => currentPoints.value.map(p => ({ lat: p.latitude, lng: p.longitude })))
+
+const selectedMarkers = computed(() => {
+  const selectedSet = new Set(selectedPointIds.value)
+  const markers = currentPoints.value.filter(p => selectedSet.has(p.id))
+  return markers.slice(0, 500)
+})
+
+async function loadDevices() {
+  try {
+    devices.value = await getDevices()
+  } catch (err: any) {
+    console.error('Failed to load devices:', err)
+  }
+}
+
+function parseInputDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
+async function loadPoints() {
+  error.value = null
+  const fromDate = parseInputDate(fromInput.value)
+  const toDate = parseInputDate(toInput.value)
+
+  if (!selectedDeviceId.value || !fromDate || !toDate) {
+    error.value = 'Bitte Gerät und Zeitraum auswählen.'
+    return
+  }
+
+  loading.value = true
+  try {
+    const route = await $fetch<any[]>('/api/route', {
+      method: 'POST',
+      body: {
+        deviceId: selectedDeviceId.value,
+        from: fromDate.toISOString(),
+        to: toDate.toISOString()
+      }
+    })
+
+    const points: ManualPoint[] = route.map(pos => ({
+      id: String(pos.id),
+      fixTime: pos.fixTime,
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      speed: pos.speed,
+      altitude: pos.altitude,
+      attributes: pos.attributes || {}
+    }))
+
+    rawPoints.value = points
+    currentPoints.value = clonePoints(points)
+    selectedPointIds.value = []
+    lassoPath.value = []
+    resetHistory(points)
+  } catch (err: any) {
+    console.error('Failed to load points:', err)
+    error.value = 'Fehler beim Laden der Positionsdaten.'
+  } finally {
+    loading.value = false
+  }
+}
+
+function onMapClick(event: any) {
+  if (!lassoMode.value || !event?.latLng) return
+  lassoPath.value = [
+    ...lassoPath.value,
+    { lat: event.latLng.lat(), lng: event.latLng.lng() }
+  ]
+}
+
+function clearLasso() {
+  lassoPath.value = []
+  selectedPointIds.value = []
+}
+
+function applyLassoSelection() {
+  if (lassoPath.value.length < 3) return
+  const selected = currentPoints.value
+    .filter(p => isPointInPolygon({ lat: p.latitude, lng: p.longitude }, lassoPath.value))
+    .map(p => p.id)
+  selectedPointIds.value = selected
+}
+
+function deleteSelection() {
+  if (selectedPointIds.value.length === 0) return
+  const selectedSet = new Set(selectedPointIds.value)
+  const next = currentPoints.value.filter(p => !selectedSet.has(p.id))
+  currentPoints.value = clonePoints(next)
+  selectedPointIds.value = []
+  pushHistory(currentPoints.value)
+}
+
+function keepSelection() {
+  if (selectedPointIds.value.length === 0) return
+  const selectedSet = new Set(selectedPointIds.value)
+  const next = currentPoints.value.filter(p => selectedSet.has(p.id))
+  currentPoints.value = clonePoints(next)
+  selectedPointIds.value = []
+  pushHistory(currentPoints.value)
+}
+
+function resetWorkspace() {
+  currentPoints.value = clonePoints(rawPoints.value)
+  selectedPointIds.value = []
+  lassoPath.value = []
+  resetHistory(currentPoints.value)
+}
+
+function undo() {
+  if (!canUndo.value) return
+  historyIndex.value -= 1
+  currentPoints.value = clonePoints(history.value[historyIndex.value])
+  selectedPointIds.value = []
+}
+
+function redo() {
+  if (!canRedo.value) return
+  historyIndex.value += 1
+  currentPoints.value = clonePoints(history.value[historyIndex.value])
+  selectedPointIds.value = []
+}
+
+function getMinMaxTimes(points: ManualPoint[]) {
+  if (points.length === 0) return null
+  const sorted = [...points].sort((a, b) => new Date(a.fixTime).getTime() - new Date(b.fixTime).getTime())
+  return { from: sorted[0].fixTime, to: sorted[sorted.length - 1].fixTime }
+}
+
+async function saveTravel() {
+  if (currentPoints.value.length === 0) {
+    error.value = 'Keine Punkte zum Speichern.'
+    return
+  }
+  if (!title.value.trim()) {
+    error.value = 'Titel ist erforderlich.'
+    return
+  }
+  if (!selectedDeviceId.value) {
+    error.value = 'Gerät ist erforderlich.'
+    return
+  }
+
+  saving.value = true
+  error.value = null
+  try {
+    const minMax = getMinMaxTimes(currentPoints.value)
+    const fromDate = minMax?.from || new Date(fromInput.value).toISOString()
+    const toDate = minMax?.to || new Date(toInput.value).toISOString()
+
+    const createResponse = await $fetch<{ id: string }>('/api/manual-travels', {
+      method: 'POST',
+      body: {
+        title: title.value.trim(),
+        source_device_id: selectedDeviceId.value,
+        from_date: fromDate,
+        to_date: toDate,
+        notes: notes.value.trim() || null
+      }
+    })
+
+    await $fetch(`/api/manual-travels/${createResponse.id}/positions`, {
+      method: 'POST',
+      body: {
+        positions: currentPoints.value.map(p => ({
+          id: p.id,
+          fixTime: p.fixTime,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          speed: p.speed,
+          altitude: p.altitude,
+          attributes: p.attributes || {}
+        }))
+      }
+    })
+
+    await getTravels()
+    manualtraveldialog.value = false
+  } catch (err: any) {
+    console.error('Failed to save manual travel:', err)
+    error.value = 'Fehler beim Speichern der Reise.'
+  } finally {
+    saving.value = false
+  }
+}
+
+function closeDialog() {
+  manualtraveldialog.value = false
+}
+
+function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ lat: number; lng: number }>) {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lat
+    const yi = polygon[i].lng
+    const xj = polygon[j].lat
+    const yj = polygon[j].lng
+
+    const intersect = ((yi > point.lng) !== (yj > point.lng)) &&
+      (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi + 0.0000001) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+</script>
+
+<template>
+  <v-dialog v-model="manualtraveldialog" fullscreen>
+    <v-card>
+      <v-toolbar color="grey-darken-3" density="compact">
+        <v-toolbar-title>Manuelle Reise-Rekonstruktion</v-toolbar-title>
+        <v-spacer></v-spacer>
+        <v-btn icon="mdi-close" @click="closeDialog"></v-btn>
+      </v-toolbar>
+
+      <v-card-text class="pa-4">
+        <v-row class="mb-3" align="center">
+          <v-col cols="12" md="3">
+            <v-select
+              label="Gerät"
+              :items="devices"
+              item-title="name"
+              item-value="id"
+              v-model="selectedDeviceId"
+              density="compact"
+            ></v-select>
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              label="Von"
+              type="datetime-local"
+              v-model="fromInput"
+              density="compact"
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              label="Bis"
+              type="datetime-local"
+              v-model="toInput"
+              density="compact"
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex align-center">
+            <v-btn color="primary" @click="loadPoints" :loading="loading">Daten laden</v-btn>
+            <span class="ml-3 text-caption">Punkte: {{ pointsCount }}</span>
+          </v-col>
+        </v-row>
+
+        <v-row class="mb-3" align="center">
+          <v-col cols="12" md="3">
+            <v-text-field
+              label="Titel"
+              v-model="title"
+              density="compact"
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="5">
+            <v-textarea
+              label="Notizen"
+              v-model="notes"
+              density="compact"
+              rows="2"
+            ></v-textarea>
+          </v-col>
+          <v-col cols="12" md="4" class="d-flex align-center">
+            <v-btn color="success" @click="saveTravel" :loading="saving">Speichern</v-btn>
+            <span class="ml-3 text-caption">Auswahl: {{ selectedCount }}</span>
+          </v-col>
+        </v-row>
+
+        <v-row class="mb-3">
+          <v-col cols="12" md="12" class="d-flex flex-wrap align-center" style="gap: 8px;">
+            <v-btn
+              :color="lassoMode ? 'warning' : 'grey-darken-1'"
+              @click="lassoMode = !lassoMode"
+            >
+              {{ lassoMode ? 'Lasso aktiv' : 'Lasso' }}
+            </v-btn>
+            <v-btn color="primary" @click="applyLassoSelection" :disabled="lassoPath.length < 3">
+              Auswahl anwenden
+            </v-btn>
+            <v-btn color="grey-darken-1" @click="clearLasso">Lasso leeren</v-btn>
+            <v-btn color="error" @click="deleteSelection" :disabled="selectedCount === 0">
+              Auswahl löschen
+            </v-btn>
+            <v-btn color="info" @click="keepSelection" :disabled="selectedCount === 0">
+              Auswahl behalten
+            </v-btn>
+            <v-btn color="grey-darken-2" @click="undo" :disabled="!canUndo">Undo</v-btn>
+            <v-btn color="grey-darken-2" @click="redo" :disabled="!canRedo">Redo</v-btn>
+            <v-btn color="grey-darken-3" @click="resetWorkspace">Zurücksetzen</v-btn>
+          </v-col>
+        </v-row>
+
+        <v-alert
+          v-if="error"
+          type="error"
+          variant="tonal"
+          class="mb-3"
+        >
+          {{ error }}
+        </v-alert>
+
+        <div style="height: 70vh; width: 100%;">
+          <GoogleMap
+            :api-key="mapsApiKey"
+            :map-id="mapsMapId"
+            :center="mapCenter"
+            :zoom="6"
+            style="height: 100%; width: 100%;"
+            @click="onMapClick"
+          >
+            <Polyline
+              v-if="polylinePath.length > 0"
+              :options="{
+                path: polylinePath,
+                strokeColor: '#1976d2',
+                strokeOpacity: 0.9,
+                strokeWeight: 3
+              }"
+            />
+
+            <Polygon
+              v-if="lassoPath.length >= 3"
+              :options="{
+                paths: lassoPath,
+                strokeColor: '#ff9800',
+                strokeOpacity: 0.9,
+                strokeWeight: 2,
+                fillColor: '#ffcc80',
+                fillOpacity: 0.2
+              }"
+            />
+
+            <Marker
+              v-for="marker in selectedMarkers"
+              :key="marker.id"
+              :options="{
+                position: { lat: marker.latitude, lng: marker.longitude },
+                icon: {
+                  path: 0,
+                  fillColor: '#ff5252',
+                  fillOpacity: 1,
+                  strokeWeight: 1,
+                  strokeColor: '#ffffff',
+                  scale: 6
+                }
+              }"
+            />
+          </GoogleMap>
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
+</template>

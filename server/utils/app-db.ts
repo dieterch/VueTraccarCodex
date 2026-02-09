@@ -86,6 +86,49 @@ function initializeAppDatabase(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_poi_device
     ON manual_pois(device_id)
   `)
+
+  // Create manual_travels table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS manual_travels (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      source_device_id INTEGER NOT NULL,
+      from_date TEXT NOT NULL,
+      to_date TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_manual_travels_device
+    ON manual_travels(source_device_id)
+  `)
+
+  // Create manual_travel_positions table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS manual_travel_positions (
+      id TEXT PRIMARY KEY,
+      travel_id TEXT NOT NULL,
+      fix_time TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      speed REAL,
+      altitude REAL,
+      attributes TEXT,
+      FOREIGN KEY (travel_id) REFERENCES manual_travels(id)
+    )
+  `)
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_manual_travel_positions_travel
+    ON manual_travel_positions(travel_id)
+  `)
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_manual_travel_positions_fix_time
+    ON manual_travel_positions(fix_time)
+  `)
 }
 
 export function getTravelPatches(): any[] {
@@ -246,6 +289,101 @@ export function saveManualPOI(poi: {
 export function deleteManualPOI(id: number): void {
   const database = getAppDb()
   database.prepare('DELETE FROM manual_pois WHERE id = ?').run(id)
+}
+
+export function getManualTravels(): any[] {
+  const database = getAppDb()
+  const rows = database.prepare(`
+    SELECT * FROM manual_travels
+    ORDER BY from_date ASC
+  `).all()
+  return rows as any[]
+}
+
+export function getManualTravel(id: string): any | null {
+  const database = getAppDb()
+  const row = database.prepare(`
+    SELECT * FROM manual_travels WHERE id = ?
+  `).get(id)
+  return row || null
+}
+
+export function createManualTravel(travel: {
+  id: string
+  title: string
+  sourceDeviceId: number
+  fromDate: string
+  toDate: string
+  notes?: string
+}): void {
+  const database = getAppDb()
+  database.prepare(`
+    INSERT INTO manual_travels
+    (id, title, source_device_id, from_date, to_date, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    travel.id,
+    travel.title,
+    travel.sourceDeviceId,
+    travel.fromDate,
+    travel.toDate,
+    travel.notes || null
+  )
+}
+
+export function deleteManualTravel(travelId: string): void {
+  const database = getAppDb()
+  const transaction = database.transaction(() => {
+    database.prepare('DELETE FROM manual_travel_positions WHERE travel_id = ?').run(travelId)
+    database.prepare('DELETE FROM manual_travels WHERE id = ?').run(travelId)
+  })
+  transaction()
+}
+
+export function getManualTravelPositions(travelId: string): any[] {
+  const database = getAppDb()
+  const rows = database.prepare(`
+    SELECT * FROM manual_travel_positions
+    WHERE travel_id = ?
+    ORDER BY fix_time ASC
+  `).all(travelId)
+  return rows as any[]
+}
+
+export function replaceManualTravelPositions(travelId: string, positions: Array<{
+  id: string
+  fixTime: string
+  latitude: number
+  longitude: number
+  speed?: number
+  altitude?: number
+  attributes?: string | null
+}>): void {
+  const database = getAppDb()
+  const transaction = database.transaction(() => {
+    database.prepare('DELETE FROM manual_travel_positions WHERE travel_id = ?').run(travelId)
+
+    const insert = database.prepare(`
+      INSERT INTO manual_travel_positions
+      (id, travel_id, fix_time, latitude, longitude, speed, altitude, attributes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const pos of positions) {
+      insert.run(
+        pos.id,
+        travelId,
+        pos.fixTime,
+        pos.latitude,
+        pos.longitude,
+        pos.speed ?? null,
+        pos.altitude ?? null,
+        pos.attributes ?? null
+      )
+    }
+  })
+
+  transaction()
 }
 
 export function closeAppDatabase() {

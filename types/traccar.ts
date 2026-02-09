@@ -145,3 +145,21 @@ export interface PlotMapsResponse {
   polylines: DevicePolyline[] // New: supports multiple device routes
   locations: MapMarker[]
 }
+
+export interface Travel {
+  id?: string
+  title: string
+  von: string  // ISO datetime
+  bis: string  // ISO datetime
+  distance: number  // km
+  source?: 'auto' | 'manual'
+  deviceId?: number
+  notes?: string
+  created_at?: string
+  farthestStandstill?: {
+    key: string
+    distance: number
+    address: string
+    country: string
+  }
+}

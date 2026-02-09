@@ -32,7 +32,9 @@ export const useTraccar = () => {
       deviceId: device.value.id,
       from: tracdate(startdate.value),
       to: tracdate(stopdate.value),
-      maxpoints: '2500'
+      maxpoints: '2500',
+      travelId: travel.value?.id,
+      travelSource: travel.value?.source
     }
     console.log('🔧 traccarPayload() called:')
     console.log('   startdate.value:', startdate.value)

@@ -35,6 +35,9 @@ export const useMapData = () => {
   // About dialog
   const aboutdialog = useState<boolean>('aboutdialog', () => false)
 
+  // Manual travel editor dialog
+  const manualtraveldialog = useState<boolean>('manualtraveldialog', () => false)
+
   // Loading state
   const isLoading = useState<boolean>('mapLoading', () => false)
   const loadingMessage = useState<string>('mapLoadingMessage', () => 'Loading...')
@@ -174,6 +177,7 @@ export const useMapData = () => {
     settingsdialog,
     configdialog,
     aboutdialog,
+    manualtraveldialog,
 
     // POI Mode
     poiMode,

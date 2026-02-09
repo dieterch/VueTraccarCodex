@@ -1,7 +1,7 @@
 # VueTraccarNuxt - Software Specification Document
 
-**Version:** 1.0.2
-**Last Updated:** 2026-02-08
+**Version:** 1.0.3
+**Last Updated:** 2026-02-09
 **Author:** Dieter Chvatal
 **Project Type:** GPS Tracking and Travel Management System
 
@@ -19,6 +19,7 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 - WordPress blog integration for travel documentation
 - RST document management for location notes
 - Manual POI creation and management (Cmd/Ctrl+Click on map)
+- Manual travel editor for curated historic trips
 - KML export for route sharing
 - Admin-only settings management (JWT-based)
 - Data export/import scripts for backup and portability
@@ -108,6 +109,8 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
    - Travel patches configuration
    - Standstill timing adjustments
    - Manual POIs (user-created points of interest)
+   - Manual travels (manually curated trips)
+   - Manual travel positions (points for manual travels)
    - Settings storage
    - Application metadata
 
@@ -528,6 +531,8 @@ interface KMLOptions {
   deviceId: number
   von: string
   bis: string
+  travelSource?: 'auto' | 'manual'
+  travelId?: string
 }
 ```
 **Response:**
@@ -611,9 +616,164 @@ interface KMLOptions {
   deviceId: number
   von: string
   bis: string
+  travelSource?: 'auto' | 'manual'
+  travelId?: string
 }
 ```
 **Response:** KML file (application/vnd.google-earth.kml+xml)
+
+### 5.2.1 Manual Travel Endpoints
+
+#### GET /api/manual-travels
+**Description:** List all manual travels
+**Response:**
+```typescript
+Array<{
+  id: string
+  title: string
+  source_device_id: number
+  from_date: string
+  to_date: string
+  notes?: string
+  created_at: string
+}>
+```
+
+#### POST /api/manual-travels
+**Description:** Create a manual travel (metadata only)
+**Request Body:**
+```typescript
+{
+  title: string
+  source_device_id: number
+  from_date: string
+  to_date: string
+  notes?: string
+}
+```
+**Response:**
+```typescript
+{ id: string }
+```
+
+#### GET /api/manual-travels/[id]/positions
+**Description:** List positions for a manual travel
+**Response:**
+```typescript
+Array<{
+  id: string
+  travel_id: string
+  fix_time: string
+  latitude: number
+  longitude: number
+  speed?: number
+  altitude?: number
+  attributes?: Record<string, any> | null
+}>
+```
+
+#### POST /api/manual-travels/[id]/positions
+**Description:** Replace positions for a manual travel
+**Request Body:**
+```typescript
+{
+  positions: Array<{
+    id?: string
+    fixTime: string
+    latitude: number
+    longitude: number
+    speed?: number
+    altitude?: number
+    attributes?: Record<string, any>
+  }>
+}
+```
+**Response:**
+```typescript
+{ success: boolean }
+```
+
+#### DELETE /api/manual-travels/[id]
+**Description:** Delete manual travel and its positions
+**Response:**
+```typescript
+{ success: boolean }
+```
+
+#### POST /api/manual-travel-workspace/open
+**Description:** Open a manual travel workspace (optional server-side workflow)
+**Request Body:**
+```typescript
+{
+  deviceId: number
+  fromDate: string
+  toDate: string
+}
+```
+**Response:**
+```typescript
+{
+  success: boolean
+  workspaceId: string
+  points: Position[]
+}
+```
+
+#### POST /api/manual-travel-workspace/delete
+**Description:** Delete selected points in workspace
+**Request Body:**
+```typescript
+{
+  workspaceId: string
+  pointIds: string[]
+}
+```
+**Response:**
+```typescript
+{ success: boolean; points: Position[] }
+```
+
+#### POST /api/manual-travel-workspace/keep
+**Description:** Keep selected points in workspace
+**Request Body:**
+```typescript
+{
+  workspaceId: string
+  pointIds: string[]
+}
+```
+**Response:**
+```typescript
+{ success: boolean; points: Position[] }
+```
+
+#### POST /api/manual-travel-workspace/reset
+**Description:** Reset workspace to original points
+**Request Body:**
+```typescript
+{
+  workspaceId: string
+}
+```
+**Response:**
+```typescript
+{ success: boolean; points: Position[] }
+```
+
+#### POST /api/manual-travel-workspace/finalize
+**Description:** Finalize workspace and persist manual travel
+**Request Body:**
+```typescript
+{
+  workspaceId: string
+  title: string
+  notes?: string
+}
+```
+**Response:**
+```typescript
+{ success: boolean; id: string }
+```
 
 ### 5.3 Travel Patches Endpoints
 
@@ -1907,11 +2067,12 @@ The `/scripts` directory contains utility scripts for exporting and importing ap
 1. **Timing Adjustments** - Export/import standstill timing modifications
 2. **Travel Patches** - Export/import travel configuration overrides
 3. **Manual POIs** - Export/import user-created points of interest
+4. **Manual Travels** - Export/import manual travel data (metadata + positions)
 
 **Technology:**
 - Runtime: Node.js (CommonJS)
 - Database: better-sqlite3
-- Format: JSON (timings, manual POIs), YAML (travel patches)
+- Format: JSON (timings, manual POIs, manual travels), YAML (travel patches)
 
 #### 14.3.2 Timing Adjustment Scripts
 

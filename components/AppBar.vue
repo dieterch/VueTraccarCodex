@@ -5,8 +5,8 @@ import { useMapData } from '~/composables/useMapData';
 import { setCookie } from '~/utils/crypto';
 import { useAuth } from '~/composables/useAuth';
 
-const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute } = useTraccar();
-const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode } = useMapData();
+const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
+const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode, manualtraveldialog } = useMapData();
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
 
@@ -24,23 +24,40 @@ function setStopDate(params) {
 }
 
 async function update_travel(item) {
-    var index = travels.value.map(function(e) { return e.title; }).indexOf(item);
-    console.log('🗺️  Travel selected:', item, 'index:', index);
-    console.log('   Travel data:', travels.value[index]);
-    travel.value = travels.value[index]
-    setCookie('travelindex', String(index), 30)
-    startdate.value = new Date(travels.value[index].von);
-    stopdate.value = new Date(travels.value[index].bis);
+    const selected = typeof item === 'string'
+        ? travels.value.find(t => t.title === item)
+        : item;
+    const index = travels.value.findIndex(t => t === selected || t.title === selected?.title);
+    console.log('🗺️  Travel selected:', selected, 'index:', index);
+    if (!selected) return;
+
+    console.log('   Travel data:', selected);
+    travel.value = selected;
+    setCookie('travelindex', String(index), 30);
+
+    if (selected.deviceId) {
+        device.value = {
+            ...device.value,
+            id: selected.deviceId
+        };
+    }
+
+    startdate.value = new Date(selected.von);
+    stopdate.value = new Date(selected.bis);
     console.log('   Set startdate to:', startdate.value);
     console.log('   Set stopdate to:', stopdate.value);
     console.log('   Calling renderMap()...');
-    renderMap()
+    renderMap();
 }
 
 const menuitems = computed(() => {
     const items = []
     if (isAdmin.value) {
-        items.push({ key: 'POI Mode', label: 'POI Mode' }, { key: 'Settings', label: 'Settings' })
+        items.push(
+            { key: 'POI Mode', label: 'POI Mode' },
+            { key: 'Manual Travel', label: 'Manual Travel' },
+            { key: 'Settings', label: 'Settings' }
+        )
     }
     items.push({ key: 'About', label: 'About' }, { key: 'Export als KML', label: 'Export als KML' })
     if (isAdmin.value) {
@@ -60,6 +77,9 @@ async function domenu(item) {
             break;
         case 'Settings':
             configdialog.value = true
+            break;
+        case 'Manual Travel':
+            manualtraveldialog.value = true
             break;
         case 'About':
             aboutdialog.value = true
@@ -219,9 +239,36 @@ onMounted(async () => {
                 prepend-icon="mdi-dots-vertical"
                 v-model="travel"
                 :items="travels"
+                item-title="title"
+                return-object
                 @update:model-value="update_travel"
                 class="mt-5 ml-6 mb-0 pb-0"
-            ></v-select>
+            >
+                <template v-slot:selection="{ item }">
+                    <div class="d-flex align-center">
+                        <v-icon
+                            v-if="item.raw?.source === 'manual'"
+                            icon="mdi-hand"
+                            size="x-small"
+                            class="mr-1"
+                        ></v-icon>
+                        <span>{{ item.raw?.title || item.title }}</span>
+                    </div>
+                </template>
+                <template v-slot:item="{ props, item }">
+                    <v-list-item v-bind="props">
+                        <v-list-item-title class="d-flex align-center">
+                            <v-icon
+                                v-if="item.raw?.source === 'manual'"
+                                icon="mdi-hand"
+                                size="x-small"
+                                class="mr-2"
+                            ></v-icon>
+                            <span>{{ item.raw?.title || item.title }}</span>
+                        </v-list-item-title>
+                    </v-list-item>
+                </template>
+            </v-select>
             <v-chip
                 variant="flat"
                 color="transparent"
