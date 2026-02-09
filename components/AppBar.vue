@@ -246,24 +246,26 @@ onMounted(async () => {
             >
                 <template v-slot:selection="{ item }">
                     <div class="d-flex align-center">
-                        <v-icon
-                            v-if="item.raw?.source === 'manual'"
-                            icon="mdi-hand"
-                            size="x-small"
-                            class="mr-1"
-                        ></v-icon>
+                        <span class="travel-icon-slot">
+                            <v-icon
+                                v-if="item.raw?.source === 'manual'"
+                                icon="mdi-hand"
+                                size="x-small"
+                            ></v-icon>
+                        </span>
                         <span>{{ item.raw?.title || item.title }}</span>
                     </div>
                 </template>
                 <template v-slot:item="{ props, item }">
                     <v-list-item v-bind="props" :title="null" :subtitle="null">
                         <v-list-item-title class="d-flex align-center">
-                            <v-icon
-                                v-if="item.raw?.source === 'manual'"
-                                icon="mdi-hand"
-                                size="x-small"
-                                class="mr-2"
-                            ></v-icon>
+                            <span class="travel-icon-slot">
+                                <v-icon
+                                    v-if="item.raw?.source === 'manual'"
+                                    icon="mdi-hand"
+                                    size="x-small"
+                                ></v-icon>
+                            </span>
                             <span>{{ item.raw?.title || item.title }}</span>
                         </v-list-item-title>
                     </v-list-item>
@@ -370,5 +372,13 @@ onMounted(async () => {
   :deep(.v-list-item-title) {
     font-size: 16px !important;
   }
+}
+.travel-icon-slot {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  flex: 0 0 18px;
 }
 </style>
