@@ -20,7 +20,7 @@ const mapsApiKey = config.public.googleMapsApiKey
 const mapsMapId = config.public.googleMapsMapId
 
 const { manualtraveldialog } = useMapData()
-const { getDevices, getTravels, device } = useTraccar()
+const { getDevices, device, travels, travel } = useTraccar()
 
 const devices = ref<TraccarDevice[]>([])
 const selectedDeviceId = ref<number | null>(null)
@@ -113,6 +113,36 @@ async function loadManualTravels() {
     manualTravels.value = await $fetch<any[]>('/api/manual-travels')
   } catch (err: any) {
     console.error('Failed to load manual travels:', err)
+  }
+}
+
+function upsertManualTravelInList(item: any) {
+  if (!item?.id) return
+  const next = [...travels.value]
+  const index = next.findIndex(t => t.id === item.id && t.source === 'manual')
+  const entry = {
+    id: item.id,
+    title: item.title,
+    von: item.from_date || item.fromDate,
+    bis: item.to_date || item.toDate,
+    distance: 0,
+    source: 'manual',
+    deviceId: item.source_device_id || item.sourceDeviceId,
+    notes: item.notes || null,
+    created_at: item.created_at
+  }
+  if (index >= 0) {
+    next[index] = { ...next[index], ...entry }
+  } else {
+    next.push(entry as any)
+  }
+  travels.value = next
+}
+
+function removeManualTravelFromList(id: string) {
+  travels.value = travels.value.filter(t => !(t.id === id && t.source === 'manual'))
+  if (travel.value?.id === id && travel.value?.source === 'manual') {
+    travel.value = travels.value.length ? travels.value[travels.value.length - 1] : null
   }
 }
 
@@ -348,8 +378,16 @@ async function saveTravel() {
       }
     })
 
-    await getTravels()
     await loadManualTravels()
+    const updated = {
+      id: travelId,
+      title: title.value.trim(),
+      source_device_id: selectedDeviceId.value,
+      from_date: fromDate,
+      to_date: toDate,
+      notes: notes.value.trim() || null
+    }
+    upsertManualTravelInList(updated)
     manualtraveldialog.value = false
   } catch (err: any) {
     console.error('Failed to save manual travel:', err)
@@ -363,11 +401,11 @@ async function deleteManualTravel(id: string) {
   if (!id) return
   try {
     await $fetch(`/api/manual-travels/${id}`, { method: 'DELETE' })
-    await getTravels()
     await loadManualTravels()
     if (editingTravelId.value === id) {
       editingTravelId.value = null
     }
+    removeManualTravelFromList(id)
   } catch (err: any) {
     console.error('Failed to delete manual travel:', err)
     error.value = 'Fehler beim Loeschen der manuellen Reise.'
