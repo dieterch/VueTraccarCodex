@@ -114,6 +114,16 @@ function parseInputDate(value: string) {
   return date
 }
 
+function formatTravelDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('de-DE', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric'
+  }).format(date)
+}
+
 async function loadPoints() {
   error.value = null
   const fromDate = parseInputDate(fromInput.value)
@@ -153,6 +163,41 @@ async function loadPoints() {
   } catch (err: any) {
     console.error('Failed to load points:', err)
     error.value = 'Fehler beim Laden der Positionsdaten.'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadManualTravel(item: any) {
+  if (!item?.id) return
+  error.value = null
+  loading.value = true
+  try {
+    const positions = await $fetch<any[]>(`/api/manual-travels/${item.id}/positions`)
+    const points: ManualPoint[] = positions.map(pos => ({
+      id: String(pos.id),
+      fixTime: pos.fix_time || pos.fixTime,
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      speed: pos.speed,
+      altitude: pos.altitude,
+      attributes: pos.attributes || {}
+    }))
+
+    title.value = item.title || ''
+    notes.value = item.notes || ''
+    selectedDeviceId.value = Number(item.source_device_id || item.sourceDeviceId || selectedDeviceId.value)
+    fromInput.value = item.from_date ? item.from_date.slice(0, 16) : fromInput.value
+    toInput.value = item.to_date ? item.to_date.slice(0, 16) : toInput.value
+
+    rawPoints.value = points
+    currentPoints.value = clonePoints(points)
+    selectedPointIds.value = []
+    lassoPath.value = []
+    resetHistory(points)
+  } catch (err: any) {
+    console.error('Failed to load manual travel:', err)
+    error.value = 'Fehler beim Laden der manuellen Reise.'
   } finally {
     loading.value = false
   }
@@ -333,10 +378,18 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
               <v-list-item-title>
                 {{ item.title }}
                 <span class="text-caption text-grey ml-2">
-                  ({{ item.from_date }} - {{ item.to_date }})
+                  ({{ formatTravelDate(item.from_date) }} - {{ formatTravelDate(item.to_date) }})
                 </span>
               </v-list-item-title>
               <template v-slot:append>
+                <v-btn
+                  size="x-small"
+                  color="primary"
+                  variant="text"
+                  @click="loadManualTravel(item)"
+                >
+                  Laden
+                </v-btn>
                 <v-btn
                   icon="mdi-delete"
                   size="x-small"
