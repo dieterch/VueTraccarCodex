@@ -398,7 +398,7 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
               :key="item.id"
               class="d-flex align-center"
             >
-              <v-list-item-title>
+              <v-list-item-title class="manual-travel-title">
                 {{ item.title }}
                 <span class="text-caption text-grey ml-2">
                   ({{ formatTravelDate(item.from_date) }} - {{ formatTravelDate(item.to_date) }})
@@ -589,6 +589,19 @@ function isPointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ 
 .manual-travel-list {
   max-height: 140px;
   overflow-y: auto;
+}
+
+.manual-travel-list :deep(.v-list-item__append) {
+  margin-inline-start: 8px;
+}
+
+.manual-travel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.manual-travel-title span {
+  white-space: nowrap;
 }
 
 .compact-row {
