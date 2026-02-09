@@ -941,7 +941,7 @@ watch(() => configdialog.value, async (isOpen) => {
                                 <v-icon icon="mdi-cellphone-link" class="mr-2"></v-icon>
                               </template>
                               <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
-                              <v-list-item-subtitle>ID: {{ item.raw.id }}</v-list-item-subtitle>
+                              <!--v-list-item-subtitle>ID: {{ item.raw.id }}</v-list-item-subtitle-->
                             </v-list-item>
                           </template>
                         </v-select>

@@ -40,14 +40,15 @@ async function update_travel(item) {
 const menuitems = computed(() => {
     const items = []
     if (isAdmin.value) {
-        items.push('POI Mode', 'Settings')
+        items.push({ key: 'POI Mode', label: 'POI Mode' }, { key: 'Settings', label: 'Settings' })
     }
-    items.push('About', 'Export als KML')
+    items.push({ key: 'About', label: 'About' }, { key: 'Export als KML', label: 'Export als KML' })
     if (isAdmin.value) {
-        items.push('Debug', 'Prefetch again')
+        items.push({ key: 'Debug', label: 'Debug' }, { key: 'Prefetch again', label: 'Prefetch again' })
     }
     if (authState.value.authenticated) {
-        items.push('Log Out')
+        const name = String(authState.value.user || '').trim()
+        items.push({ key: 'Log Out', label: name ? `Log Out (${name})` : 'Log Out' })
     }
     return items
 })
@@ -190,18 +191,18 @@ onMounted(async () => {
                     </v-tooltip>
                 </template>
                 <v-list density="compact">
-                    <v-list-item
+                <v-list-item
                         v-for="(item, index) in menuitems"
                         :key="index"
-                        :value="item"
+                        :value="item.key"
                     >
-                        <v-list-item-title @click="domenu(item)">
-                            <template v-if="item === 'POI Mode'">
+                        <v-list-item-title @click="domenu(item.key)">
+                            <template v-if="item.key === 'POI Mode'">
                                 <v-icon :icon="poiMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'" size="small" class="mr-2"></v-icon>
                                 POI Mode
                             </template>
                             <template v-else>
-                                {{ item }}
+                                {{ item.label }}
                             </template>
                         </v-list-item-title>
                     </v-list-item>

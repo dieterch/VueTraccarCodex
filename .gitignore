@@ -40,3 +40,5 @@ data/travels.yml
 # Backup files
 data/*.bak
 data/*.backup
+
+_codex
