@@ -23,13 +23,38 @@ const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..');
 
 function main() {
   const args = process.argv.slice(2);
-  const travelId = args[0] && !args[0].startsWith('--') ? args[0] : null;
-  const outputArgIndex = travelId ? 1 : 0;
+  const travelFlagIndex = args.indexOf('--travel');
+  const outputFlagIndex = args.indexOf('--output');
+  const usedIndices = new Set();
+
+  let travelId = null;
+  if (travelFlagIndex >= 0 && args[travelFlagIndex + 1]) {
+    travelId = args[travelFlagIndex + 1];
+    usedIndices.add(travelFlagIndex);
+    usedIndices.add(travelFlagIndex + 1);
+  }
+
+  let outputFile = null;
+  if (outputFlagIndex >= 0 && args[outputFlagIndex + 1]) {
+    outputFile = args[outputFlagIndex + 1];
+    usedIndices.add(outputFlagIndex);
+    usedIndices.add(outputFlagIndex + 1);
+  }
+
+  const positional = args.filter((_, index) => !usedIndices.has(index));
+  if (!travelId && positional.length > 0 && !positional[0].endsWith('.json')) {
+    travelId = positional.shift();
+  }
+
+  if (!outputFile && positional.length > 0) {
+    outputFile = positional.shift();
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const outputFile = args[outputArgIndex] || `manual-travels-export-${timestamp}.json`;
-  const outputPath = path.isAbsolute(outputFile)
-    ? outputFile
-    : path.join(DEFAULT_OUTPUT_DIR, outputFile);
+  const finalOutputFile = outputFile || `manual-travels-export-${timestamp}.json`;
+  const resolvedOutputPath = path.isAbsolute(finalOutputFile)
+    ? finalOutputFile
+    : path.join(DEFAULT_OUTPUT_DIR, finalOutputFile);
 
   console.log('Export Manual Travels');
   console.log('=====================\n');
@@ -40,7 +65,7 @@ function main() {
   }
 
   console.log(`Database: ${DB_PATH}`);
-  console.log(`Output:   ${outputPath}\n`);
+  console.log(`Output:   ${resolvedOutputPath}\n`);
 
   try {
     const db = new Database(DB_PATH, { readonly: true });
@@ -71,7 +96,7 @@ function main() {
       }));
 
       return {
-        travel,
+        travel: { ...travel, name: travel.title },
         positions
       };
     });
@@ -88,11 +113,10 @@ function main() {
     const exportData = travelId
       ? { meta, travel: travelExports[0]?.travel || null, positions: travelExports[0]?.positions || [] }
       : { meta, travels: travelExports };
-
-    fs.writeFileSync(outputPath, JSON.stringify(exportData, null, 2), 'utf8');
+    fs.writeFileSync(resolvedOutputPath, JSON.stringify(exportData, null, 2), 'utf8');
 
     console.log(`✓ Exported ${travelExports.length} manual travel(s)`);
-    console.log(`✓ Output saved to: ${outputPath}\n`);
+    console.log(`✓ Output saved to: ${resolvedOutputPath}\n`);
   } catch (error) {
     console.error('Error during export:', error.message);
     process.exit(1);

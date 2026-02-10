@@ -104,8 +104,9 @@ function main() {
       `);
 
       travelBundles.forEach(bundle => {
-        const travel = bundle.travel;
-        const positions = bundle.positions || [];
+      const travel = normalizeTravel(bundle.travel);
+      if (!travel) return;
+      const positions = normalizePositions(bundle.positions || []);
 
         upsertTravel.run(
           travel.id,
@@ -162,6 +163,31 @@ function normalizeImport(importData) {
   }
 
   return [];
+}
+
+function normalizeTravel(travel) {
+  if (!travel) return null;
+  return {
+    id: travel.id,
+    title: travel.title || travel.name || `Manual Travel ${travel.id}`,
+    source_device_id: travel.source_device_id ?? travel.sourceDeviceId,
+    from_date: travel.from_date || travel.fromDate,
+    to_date: travel.to_date || travel.toDate,
+    notes: travel.notes,
+    created_at: travel.created_at || travel.createdAt
+  };
+}
+
+function normalizePositions(positions) {
+  return positions.map(pos => ({
+    id: pos.id,
+    fix_time: pos.fix_time || pos.fixTime,
+    latitude: pos.latitude,
+    longitude: pos.longitude,
+    speed: pos.speed ?? null,
+    altitude: pos.altitude ?? null,
+    attributes: pos.attributes ?? pos.attributes
+  }));
 }
 
 main();
