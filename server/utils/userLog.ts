@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import { getRequestIP } from 'h3'
+import path from 'path'
 
 type UserLogEntry = {
   user: string
@@ -8,8 +9,8 @@ type UserLogEntry = {
   ip?: string
 }
 
-const LOG_PATH = '/log/users.log'
-const LOG_DIR = '/log'
+const LOG_DIR = path.resolve(process.cwd(), 'log')
+const LOG_PATH = path.join(LOG_DIR, 'users.log')
 
 export const logUserEvent = async (event: any, entry: UserLogEntry) => {
   try {
