@@ -45,7 +45,14 @@ export const useMapData = () => {
   // Load manual POIs
   const loadManualPOIs = async () => {
     try {
-      const response = await $fetch('/api/manual-pois')
+      const payload = traccarPayload()
+      const response = await $fetch('/api/manual-pois', {
+        query: {
+          deviceId: payload.deviceId,
+          from: payload.from,
+          to: payload.to
+        }
+      })
       if (response.success) {
         manualPOIs.value = response.pois
       }

@@ -250,6 +250,18 @@ export function getAllManualPOIs(): any[] {
   return rows as any[]
 }
 
+export function getManualPOIsForRange(deviceId: number, from: string, to: string): any[] {
+  const database = getAppDb()
+  const rows = database.prepare(`
+    SELECT * FROM manual_pois
+    WHERE device_id = ?
+      AND timestamp >= ?
+      AND timestamp <= ?
+    ORDER BY timestamp DESC
+  `).all(deviceId, from, to)
+  return rows as any[]
+}
+
 export function getManualPOI(id: number): any | null {
   const database = getAppDb()
   const row = database.prepare(`

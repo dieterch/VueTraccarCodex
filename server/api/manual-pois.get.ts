@@ -1,8 +1,15 @@
-import { getAllManualPOIs } from '../utils/app-db'
+import { getAllManualPOIs, getManualPOIsForRange } from '../utils/app-db'
 
 export default defineEventHandler(async (event) => {
   try {
-    const pois = getAllManualPOIs()
+    const query = getQuery(event)
+    const deviceId = query.deviceId ? Number(query.deviceId) : null
+    const from = query.from ? String(query.from) : null
+    const to = query.to ? String(query.to) : null
+
+    const pois = deviceId && from && to
+      ? getManualPOIsForRange(deviceId, from, to)
+      : getAllManualPOIs()
     return {
       success: true,
       pois
