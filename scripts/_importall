@@ -1,0 +1,4 @@
+./scripts/import-travel-patches.cjs  travel-patches-export.yml
+./scripts/import-timings.cjs timings-export.json
+./scripts/import-manual-pois.cjs manual-pois-export.json
+./scripts/import-manual-travels.cjs manual-travels-export.json

@@ -1,0 +1,4 @@
+./scripts/import-travel-patches.cjs  travel-patches-export.yml --dry-run
+./scripts/import-timings.cjs timings-export.json --dry-run
+./scripts/import-manual-pois.cjs manual-pois-export.json --dry-run
+./scripts/import-manual-travels.cjs manual-travels-export.json --dry-run
