@@ -100,7 +100,8 @@ export default defineEventHandler(async (event) => {
         // Create polyline path directly from Traccar positions
         const path = positions.map(p => ({
           lat: p.latitude,
-          lng: p.longitude
+          lng: p.longitude,
+          timestamp: p.fixTime
         }))
 
         return {
