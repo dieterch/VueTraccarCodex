@@ -43,6 +43,9 @@ const dialogPosition = ref({ x: 0, y: 0 }); // Will be calculated on open
 const isDragging = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
 
+// State für die Position des timestamp - InfoWindows
+const timestampinfoWindowPos = ref(null);
+
 // Computed property for responsive InfoWindow sizing (iPhone-only)
 const infoWindowWidth = computed(() => {
   const vw = window.innerWidth
@@ -555,13 +558,21 @@ function getMarkerIcon(location: any) {
 
 // POI Creation Functions
 async function handlePolylineClick(event: any, polyline: any) {
-  if (!poiMode.value) return
-
+  
   const clickedLat = event.latLng.lat()
   const clickedLng = event.latLng.lng()
-
+  
   // Find nearest position in polyline path
   const nearest = findNearestPosition(clickedLat, clickedLng, polyline.path)
+  
+  if (!poiMode.value) {
+    timestampinfoWindowPos.value = {
+      lat: clickedLat,
+      lng: clickedLng,
+      timestamp:  nearest.timestamp
+    }
+    return
+  }
 
   if (nearest && nearest.timestamp) {
     await createManualPOI(clickedLat, clickedLng, nearest.timestamp, polyline.deviceId)
@@ -816,6 +827,7 @@ function decodeHtml(html) {
           strokeWeight: polyline.lineWeight,
           zIndex: 75
         }"
+        @click="(e) => handlePolylineClick(e, polyline)"
       />
     </template>
 
@@ -1068,6 +1080,18 @@ function decodeHtml(html) {
         </InfoWindow>
       </Marker>
     </MarkerCluster>
+      <InfoWindow
+        v-if="timestampinfoWindowPos"
+        :options="{ position: {
+            lat: timestampinfoWindowPos.lat,
+            lng: timestampinfoWindowPos.lng,
+          } }"
+        @closeclick="timestampinfoWindowPos = null"
+      >
+        <div style="color: black;">
+          <p>{{ new Date(timestampinfoWindowPos.timestamp).toLocaleString() }}</p>
+        </div>
+      </InfoWindow>
     </GoogleMap>
 
     <!-- Compact Draggable Time Adjustment Panel -->
