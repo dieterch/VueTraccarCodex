@@ -565,6 +565,7 @@ async function handlePolylineClick(event: any, polyline: any) {
   // Find nearest position in polyline path
   const nearest = findNearestPosition(clickedLat, clickedLng, polyline.path)
   
+  // show date and time if not in POI Mode
   if (!poiMode.value) {
     timestampinfoWindowPos.value = {
       lat: clickedLat,
@@ -967,15 +968,19 @@ function decodeHtml(html) {
                     <th>Lat, Lng</th>
                     <td>{{ location.lat.toFixed(2) }}, {{ location.lng.toFixed(2) }}</td>
                   </tr>
-                  <tr>
+                  <tr v-if="!location.isPOI">
                     <th>von</th>
                     <td>{{ location.von }}</td>
                   </tr>
-                  <tr>
+                  <tr v-if="location.isPOI">
+                    <th>am</th>
+                    <td>{{ new Date(location.von).toLocaleString() }}</td>
+                  </tr>
+                  <tr v-if="!location.isPOI">
                     <th>bis</th>
                     <td>{{ location.bis }}</td>
                   </tr>
-                  <tr>
+                  <tr v-if="!location.isPOI">
                     <th>Dauer</th>
                     <td>{{ location.period }}h</td>
                   </tr>
@@ -1045,7 +1050,6 @@ function decodeHtml(html) {
                   </v-btn>
 
                   <v-btn
-                    v-if="isAdmin"
                     color="grey-darken-2"
                     variant="outlined"
                     size="small"
