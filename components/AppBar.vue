@@ -294,7 +294,7 @@ onMounted(async () => {
                 nosize="small"
                 @click="renderMap"
             ></v-btn -->
-            <v-btn icon= "mdi-rv-truck" href="https://tagebuch.smallfamilybusiness.net/" size="small"></v-btn>
+            <v-btn icon= "mdi-rv-truck" href="https://tagebuch.smallfamilybusiness.net/" target="_blank" size="small"></v-btn>
             <!-- v-menu
                 location="bottom"
                 >
