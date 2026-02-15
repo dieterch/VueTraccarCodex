@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, mergeProps, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useTraccar } from '~/composables/useTraccar';
 import { useMapData } from '~/composables/useMapData';
 import { setCookie } from '~/utils/crypto';
@@ -9,6 +10,7 @@ const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCa
 const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode, manualtraveldialog } = useMapData();
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
+const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
 
@@ -192,25 +194,50 @@ onMounted(async () => {
 
     <v-app-bar
         name="menu-bar"
+        app
         density="compact"
         color="grey-darken-3"
         :elevation="5"
         >
         <template v-slot:prepend>
-            <v-menu location="bottom">
+            <v-menu location="bottom" :close-on-content-click="!smAndDown">
                 <template v-slot:activator="{ props: menu }">
-                    <v-tooltip open-delay="500">
-                        <template v-slot:activator="{ props: tooltip }">
-                            <v-app-bar-nav-icon
-                            v-bind="mergeProps(menu, tooltip)"
-                            nosize="small"
-                            >
-                            </v-app-bar-nav-icon>
-                        </template>
-                        <span>Tooltip</span>
-                    </v-tooltip>
+                    <v-app-bar-nav-icon
+                        v-bind="menu"
+                        nosize="small"
+                    >
+                    </v-app-bar-nav-icon>
                 </template>
                 <v-list density="compact">
+                <v-list-item v-if="smAndDown">
+                    <v-select
+                        :label="''"
+                        placeholder="Reise auswählen"
+                        density="compact"
+                        hide-details
+                        single-line
+                        v-model="travel"
+                        :items="travels"
+                        item-title="title"
+                        return-object
+                        :menu-props="{ contentClass: 'travel-select-menu mobile-travel-select-menu' }"
+                        @update:model-value="update_travel"
+                        class="mobile-travel-select"
+                    >
+                        <template v-slot:selection="{ item }">
+                            <div class="d-flex align-center">
+                                <span>{{ item.raw?.title || item.title }}</span>
+                            </div>
+                        </template>
+                        <template v-slot:item="{ props, item }">
+                            <v-list-item v-bind="props" :title="null" :subtitle="null">
+                                <v-list-item-title class="d-flex align-center">
+                                    <span>{{ item.raw?.title || item.title }}</span>
+                                </v-list-item-title>
+                            </v-list-item>
+                        </template>
+                    </v-select>
+                </v-list-item>
                 <v-list-item
                         v-for="(item, index) in menuitems"
                         :key="index"
@@ -233,6 +260,7 @@ onMounted(async () => {
 
         <template v-slot:default>
             <v-select
+                v-if="!smAndDown"
                 :label="`${travels.length} Reisen`"
                 flat
                 density="compact"
@@ -275,16 +303,22 @@ onMounted(async () => {
             <v-chip
                 variant="flat"
                 color="transparent"
-                class="ml-2">
+                class="appbar-distance">
                 {{ Math.round(distance) }} km
             </v-chip>
-            <DateDialog :key="`start-${startdate}`" :datum="startdate" @getDate="setStartDate"/>
-            <DateDialog :key="`stop-${stopdate}`" :datum="stopdate" @getDate="setStopDate"/>
+            <div class="appbar-dates">
+                <div class="appbar-date">
+                    <DateDialog :key="`start-${startdate}`" :datum="startdate" @getDate="setStartDate"/>
+                </div>
+                <div class="appbar-date">
+                    <DateDialog :key="`stop-${stopdate}`" :datum="stopdate" @getDate="setStopDate"/>
+                </div>
+            </div>
         </template>
         <template v-slot:append>
             <v-btn
                 icon="mdi-reload"
-                class="ml-2"
+                class="ml-1 appbar-reload"
                 nosize="small"
                 @click="renderMap"
             ></v-btn>
@@ -294,7 +328,7 @@ onMounted(async () => {
                 nosize="small"
                 @click="renderMap"
             ></v-btn -->
-            <v-btn icon= "mdi-rv-truck" href="https://tagebuch.smallfamilybusiness.net/" target="_blank" size="small"></v-btn>
+            <v-btn v-if="!smAndDown" icon= "mdi-rv-truck" href="https://tagebuch.smallfamilybusiness.net/" target="_blank" size="small"></v-btn>
             <!-- v-menu
                 location="bottom"
                 >
@@ -327,63 +361,59 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* iPhone-specific optimizations for travel dropdown */
+/* iPhone-specific optimizations for compact app bar controls */
 @media (max-width: 425px) {
-  /* Increase touch target size for select dropdown */
-  :deep(.v-select) {
-    min-height: 48px !important;
+  :deep(.v-toolbar__content) {
+    padding-inline: 2px;
   }
 
-  :deep(.v-select .v-field__input) {
-    min-height: 48px !important;
-    font-size: 16px !important;
-    padding-top: 12px !important;
-    padding-bottom: 12px !important;
+  .appbar-distance {
+    margin-inline: 2px !important;
+    padding-inline: 2px !important;
+    min-width: 78px;
+    white-space: nowrap;
+    font-size: 12px;
   }
 
-  :deep(.v-select .v-field__append-inner) {
-    padding-top: 12px !important;
+  .appbar-dates {
+    gap: 1px;
+    margin-left: 0;
   }
 
-  :deep(.v-select .v-field__prepend-inner) {
-    padding-top: 12px !important;
+  .appbar-date :deep(.v-btn) {
+    min-width: 0 !important;
+    padding-inline: 4px !important;
+    font-size: 12px !important;
   }
 
-  /* Increase font size for better readability */
-  :deep(.v-select .v-select__selection) {
-    font-size: 16px !important;
+  .appbar-date :deep(.v-btn__prepend) {
+    display: none !important;
   }
 
-  :deep(.v-label) {
-    font-size: 14px !important;
-  }
-
-  /* Increase chip text size */
-  :deep(.v-chip) {
-    font-size: 15px !important;
+  .appbar-reload {
+    margin-left: 1px !important;
   }
 }
 
-/* Make travel dropdown menu items more touch-friendly on iPhone */
-@media (max-width: 425px) {
-  :deep(.v-list-item) {
-    min-height: 48px !important;
-  }
-
-  :deep(.v-list-item-title) {
-    font-size: 16px !important;
-  }
-}
-.travel-icon-slot {
-  width: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 4px;
-  flex: 0 0 14px;
+.mobile-travel-select {
+  min-width: 220px;
 }
 
 :deep(.travel-select-menu .v-list-item__content) {
   padding-inline-start: 0;
+}
+
+.appbar-distance {
+  margin-left: 2px;
+  margin-right: auto;
+  min-width: 78px;
+  justify-content: flex-start;
+}
+
+.appbar-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
 }
 </style>

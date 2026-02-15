@@ -761,7 +761,7 @@ function decodeHtml(html) {
 </script>
 
 <template>
-  <div style="width: 100%; height: calc(100vh - 48px); position: relative;">
+  <div style="width: 100%; height: calc(100dvh - var(--v-layout-top, 0px) - var(--v-layout-bottom, 0px)); position: relative;">
     <!-- Loading Overlay -->
     <div
       v-if="isLoading"
