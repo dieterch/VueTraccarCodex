@@ -312,6 +312,7 @@ function openAdjustmentDialog(location) {
   currentAdjustmentLocation.value = location;
   dialogPosition.value = calculateDialogPosition();
   adjustmentDialog.value = true;
+  loadStandstillSideTrips(location);
 }
 
 // Drag handlers for floating dialog (supports both mouse and touch)
@@ -534,6 +535,7 @@ async function loadStandstillSideTrips(location, isReload = false) {
     alert("Failed to load side trips. Check console for details.");
   } finally {
     loadingSideTrips.value[location.key] = false;
+    closeInfoWindows();
   }
 }
 
@@ -1175,7 +1177,7 @@ function decodeHtml(html) {
 
                 <div
                   style="
-                    margin-top: 15px;
+                    margin-top: 10px;
                     border-top: 2px solid #1976d2;
                     padding-top: 15px;
                   "
