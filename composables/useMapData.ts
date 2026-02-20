@@ -1,9 +1,17 @@
 import { ref } from 'vue'
 import type { MapCenter, MapMarker, DevicePolyline } from '~/types/traccar'
 import { useTraccar } from './useTraccar'
+import { useTravelCache } from './useTravelCache'
 
 export const useMapData = () => {
   const { traccarPayload } = useTraccar()
+  const {
+    buildTravelCacheKey,
+    getTravelSnapshot,
+    saveTravelSnapshot,
+    markCachedDataUsed,
+    markNetworkDataUsed
+  } = useTravelCache()
 
   // Map state
   const polygone = useState<Array<{ lat: number; lng: number }>>('polygone', () => [])
@@ -71,14 +79,53 @@ export const useMapData = () => {
       sideTripPolylines.value = []
 
       const payload = traccarPayload()
-
-      const data = await $fetch('/api/plotmaps', {
-        method: 'POST',
-        body: payload
+      const cacheKey = buildTravelCacheKey({
+        deviceId: payload.deviceId,
+        from: payload.from,
+        to: payload.to,
+        travelId: payload.travelId,
+        travelSource: payload.travelSource
       })
 
-      // Load manual POIs
-      await loadManualPOIs()
+      let data: any = null
+      let pois: any[] = []
+      try {
+        const plotData = await $fetch('/api/plotmaps', {
+          method: 'POST',
+          body: payload
+        })
+        let poiResponse: any = null
+        try {
+          poiResponse = await $fetch<any>('/api/manual-pois', {
+            query: {
+              deviceId: payload.deviceId,
+              from: payload.from,
+              to: payload.to
+            }
+          })
+        } catch (poiError) {
+          console.warn('Manual POI fetch failed, continuing without POIs:', poiError)
+        }
+        data = plotData
+        pois = poiResponse?.success ? (poiResponse.pois || []) : []
+        manualPOIs.value = pois
+
+        await saveTravelSnapshot(cacheKey, {
+          plotmaps: data,
+          manualPois: pois
+        })
+        markNetworkDataUsed()
+      } catch (networkError) {
+        const snapshot = await getTravelSnapshot(cacheKey)
+        if (!snapshot?.payload?.plotmaps) {
+          throw networkError
+        }
+        data = snapshot.payload.plotmaps
+        pois = snapshot.payload.manualPois || []
+        manualPOIs.value = pois
+        markCachedDataUsed(snapshot.savedAt)
+        console.warn('Using cached travel snapshot for map rendering:', cacheKey)
+      }
 
       // Convert POIs to markers
       const poiMarkers = manualPOIs.value.map(poi => ({

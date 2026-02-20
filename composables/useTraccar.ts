@@ -2,8 +2,17 @@ import { ref } from 'vue'
 import { tracdate } from '~/utils/date'
 import { getCookie } from '~/utils/crypto'
 import type { Travel, TraccarDevice, TraccarEvent } from '~/types/traccar'
+import { useTravelCache } from './useTravelCache'
 
 export const useTraccar = () => {
+  const {
+    buildTravelCacheKey,
+    getTravelSnapshot,
+    saveTravelSnapshot,
+    markCachedDataUsed,
+    markNetworkDataUsed
+  } = useTravelCache()
+
   // State
   const device = useState<TraccarDevice>('device', () => ({
     id: 4,
@@ -85,13 +94,33 @@ export const useTraccar = () => {
   const getRoute = async () => {
     try {
       const payload = traccarPayload()
-      const data = await $fetch('/api/route', {
-        method: 'POST',
-        body: payload
+      const cacheKey = buildTravelCacheKey({
+        deviceId: payload.deviceId,
+        from: payload.from,
+        to: payload.to,
+        travelId: payload.travelId,
+        travelSource: payload.travelSource
       })
-
-      route.value = data
-      return data
+      try {
+        const data = await $fetch('/api/route', {
+          method: 'POST',
+          body: payload
+        })
+        route.value = data
+        await saveTravelSnapshot(cacheKey, { route: data as any[] })
+        markNetworkDataUsed()
+        return data
+      } catch (networkError) {
+        const snapshot = await getTravelSnapshot(cacheKey)
+        const cachedRoute = snapshot?.payload?.route
+        if (!cachedRoute) {
+          throw networkError
+        }
+        route.value = cachedRoute
+        markCachedDataUsed(snapshot.savedAt)
+        console.warn('Using cached route data:', cacheKey)
+        return cachedRoute
+      }
     } catch (error) {
       console.error('Error fetching route:', error)
       throw error
@@ -102,13 +131,33 @@ export const useTraccar = () => {
   const getEvents = async () => {
     try {
       const payload = traccarPayload()
-      const data = await $fetch<TraccarEvent[]>('/api/events', {
-        method: 'POST',
-        body: payload
+      const cacheKey = buildTravelCacheKey({
+        deviceId: payload.deviceId,
+        from: payload.from,
+        to: payload.to,
+        travelId: payload.travelId,
+        travelSource: payload.travelSource
       })
-
-      events.value = data
-      return data
+      try {
+        const data = await $fetch<TraccarEvent[]>('/api/events', {
+          method: 'POST',
+          body: payload
+        })
+        events.value = data
+        await saveTravelSnapshot(cacheKey, { events: data })
+        markNetworkDataUsed()
+        return data
+      } catch (networkError) {
+        const snapshot = await getTravelSnapshot(cacheKey)
+        const cachedEvents = snapshot?.payload?.events
+        if (!cachedEvents) {
+          throw networkError
+        }
+        events.value = cachedEvents
+        markCachedDataUsed(snapshot.savedAt)
+        console.warn('Using cached events data:', cacheKey)
+        return cachedEvents
+      }
     } catch (error) {
       console.error('Error fetching events:', error)
       throw error

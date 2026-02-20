@@ -51,6 +51,7 @@ try {
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: true },
+  modules: ['@vite-pwa/nuxt'],
 
   devServer: {
     host: '0.0.0.0',
@@ -64,6 +65,119 @@ export default defineNuxtConfig({
 
   build: {
     transpile: ['vuetify'],
+  },
+
+  pwa: {
+    registerType: 'autoUpdate',
+    manifest: {
+      name: 'Vue Traccar',
+      short_name: 'Traccar',
+      description: 'Travel visualization and manual travel reconstruction',
+      display: 'standalone',
+      start_url: '/',
+      scope: '/',
+      background_color: '#263238',
+      theme_color: '#263238',
+      icons: [
+        {
+          src: '/icons/icon-192.svg',
+          sizes: '192x192',
+          type: 'image/svg+xml',
+          purpose: 'any'
+        },
+        {
+          src: '/icons/icon-512.svg',
+          sizes: '512x512',
+          type: 'image/svg+xml',
+          purpose: 'any'
+        },
+        {
+          src: '/icons/icon-maskable.svg',
+          sizes: '512x512',
+          type: 'image/svg+xml',
+          purpose: 'maskable'
+        }
+      ]
+    },
+    workbox: {
+      globPatterns: ['**/*.{js,css,html,svg,png,ico,txt,woff2}'],
+      navigateFallback: '/offline',
+      runtimeCaching: [
+        {
+          urlPattern: /\/api\/auth\/.*/i,
+          handler: 'NetworkOnly',
+          method: 'GET'
+        },
+        {
+          urlPattern: /\/api\/auth\/.*/i,
+          handler: 'NetworkOnly',
+          method: 'POST'
+        },
+        {
+          urlPattern: /\/api\/.*/i,
+          handler: 'NetworkFirst',
+          options: {
+            cacheName: 'api-cache',
+            networkTimeoutSeconds: 4,
+            expiration: {
+              maxEntries: 200,
+              maxAgeSeconds: 60 * 60 * 24 * 14
+            },
+            cacheableResponse: {
+              statuses: [0, 200]
+            }
+          }
+        },
+        {
+          urlPattern: /^https:\/\/maps\.googleapis\.com\/.*/i,
+          handler: 'StaleWhileRevalidate',
+          options: {
+            cacheName: 'google-maps-api',
+            expiration: {
+              maxEntries: 64,
+              maxAgeSeconds: 60 * 60 * 24 * 14
+            },
+            cacheableResponse: {
+              statuses: [0, 200]
+            }
+          }
+        },
+        {
+          urlPattern: /^https:\/\/maps\.gstatic\.com\/.*/i,
+          handler: 'StaleWhileRevalidate',
+          options: {
+            cacheName: 'google-maps-static',
+            expiration: {
+              maxEntries: 128,
+              maxAgeSeconds: 60 * 60 * 24 * 14
+            },
+            cacheableResponse: {
+              statuses: [0, 200]
+            }
+          }
+        },
+        {
+          urlPattern: /^https:\/\/(mt|khms)\d?\.google\.com\/.*/i,
+          handler: 'StaleWhileRevalidate',
+          options: {
+            cacheName: 'google-maps-tiles',
+            expiration: {
+              maxEntries: 300,
+              maxAgeSeconds: 60 * 60 * 24 * 7
+            },
+            cacheableResponse: {
+              statuses: [0, 200]
+            }
+          }
+        }
+      ]
+    },
+    client: {
+      installPrompt: true
+    },
+    devOptions: {
+      enabled: true
+    }
   },
 
   runtimeConfig: {

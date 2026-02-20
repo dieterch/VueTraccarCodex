@@ -5,14 +5,22 @@ import { useTraccar } from '~/composables/useTraccar';
 import { useMapData } from '~/composables/useMapData';
 import { setCookie } from '~/utils/crypto';
 import { useAuth } from '~/composables/useAuth';
+import { useTravelCache } from '~/composables/useTravelCache';
 
 const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
 const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode, manualtraveldialog } = useMapData();
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
+const { isOffline, usingCachedTravel, cachedTravelUpdatedAt } = useTravelCache();
 const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
+const cachedTravelUpdatedLabel = computed(() => {
+    if (!cachedTravelUpdatedAt.value) return '';
+    const date = new Date(cachedTravelUpdatedAt.value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('de-DE');
+});
 
 function openSettingsDialog() {
     settingsdialog.value = true;
@@ -54,6 +62,11 @@ async function update_travel(item) {
 
 const menuitems = computed(() => {
     const items = []
+    items.push({
+        key: 'Refresh from server',
+        label: 'Refresh from server',
+        disabled: isOffline.value
+    })
     if (isAdmin.value) {
         items.push(
             { key: 'POI Mode', label: 'POI Mode' },
@@ -73,6 +86,11 @@ const menuitems = computed(() => {
 })
 async function domenu(item) {
     switch (item) {
+        case 'Refresh from server':
+            if (!isOffline.value) {
+                await renderMap()
+            }
+            break;
         case 'POI Mode':
             poiMode.value = !poiMode.value
             console.log('POI Mode toggled:', poiMode.value)
@@ -242,6 +260,7 @@ onMounted(async () => {
                         v-for="(item, index) in menuitems"
                         :key="index"
                         :value="item.key"
+                        :disabled="item.disabled"
                     >
                         <v-list-item-title @click="domenu(item.key)">
                             <template v-if="item.key === 'POI Mode'">
@@ -316,6 +335,22 @@ onMounted(async () => {
             </div>
         </template>
         <template v-slot:append>
+            <v-chip
+                v-if="isOffline"
+                size="x-small"
+                color="warning"
+                class="mr-1"
+            >
+                Offline
+            </v-chip>
+            <v-chip
+                v-if="usingCachedTravel"
+                size="x-small"
+                color="info"
+                class="mr-1"
+            >
+                Cache {{ cachedTravelUpdatedLabel }}
+            </v-chip>
             <v-btn
                 icon="mdi-reload"
                 class="ml-1 appbar-reload"
