@@ -101,7 +101,7 @@ export default defineNuxtConfig({
     },
     workbox: {
       globPatterns: ['**/*.{js,css,html,svg,png,ico,txt,woff2}'],
-      navigateFallback: '/offline',
+      navigateFallback: '/offline.html',
       runtimeCaching: [
         {
           urlPattern: /\/api\/auth\/.*/i,
