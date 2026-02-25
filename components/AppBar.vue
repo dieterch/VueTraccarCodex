@@ -3,11 +3,10 @@ import { ref, onMounted, computed } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useTraccar } from '~/composables/useTraccar';
 import { useMapData } from '~/composables/useMapData';
-import { setCookie } from '~/utils/crypto';
 import { useAuth } from '~/composables/useAuth';
 import { useTravelCache } from '~/composables/useTravelCache';
 
-const { startdate, stopdate, travel, travels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
+const { startdate, stopdate, travel, travels, selectedTravels, setSelectedTravels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
 const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode, manualtraveldialog } = useMapData();
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
@@ -21,6 +20,19 @@ const cachedTravelUpdatedLabel = computed(() => {
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleString('de-DE');
 });
+const allTravelsSelected = computed(() => travels.value.length > 0 && selectedTravels.value.length === travels.value.length);
+const someTravelsSelected = computed(() => selectedTravels.value.length > 0 && !allTravelsSelected.value);
+
+function travelKey(item) {
+    const source = item?.source || 'auto';
+    const id = item?.id || `${item?.deviceId || ''}:${item?.von}:${item?.bis}`;
+    return `${source}:${id}`;
+}
+
+function isTravelSelected(item) {
+    const key = travelKey(item);
+    return selectedTravels.value.some(selected => travelKey(selected) === key);
+}
 
 function openSettingsDialog() {
     settingsdialog.value = true;
@@ -34,30 +46,21 @@ function setStopDate(params) {
 }
 
 async function update_travel(item) {
-    const selected = typeof item === 'string'
-        ? travels.value.find(t => t.title === item)
-        : item;
-    const index = travels.value.findIndex(t => t === selected || t.title === selected?.title);
-    console.log('🗺️  Travel selected:', selected, 'index:', index);
-    if (!selected) return;
+    const values = Array.isArray(item) ? item : [item];
+    const selectedItems = values
+        .map(entry => typeof entry === 'string' ? travels.value.find(t => t.title === entry) : entry)
+        .filter(Boolean);
+    await setSelectedTravels(selectedItems);
+}
 
-    console.log('   Travel data:', selected);
-    travel.value = selected;
-    setCookie('travelindex', String(index), 30);
-
-    if (selected.deviceId) {
-        device.value = {
-            ...device.value,
-            id: selected.deviceId
-        };
+async function toggleAllTravels() {
+    if (travels.value.length === 0) return;
+    if (allTravelsSelected.value) {
+        const fallback = selectedTravels.value[0] || travels.value[travels.value.length - 1];
+        await setSelectedTravels([fallback]);
+        return;
     }
-
-    startdate.value = new Date(selected.von);
-    stopdate.value = new Date(selected.bis);
-    console.log('   Set startdate to:', startdate.value);
-    console.log('   Set stopdate to:', stopdate.value);
-    console.log('   Calling renderMap()...');
-    renderMap();
+    await setSelectedTravels([...travels.value]);
 }
 
 const menuitems = computed(() => {
@@ -234,21 +237,42 @@ onMounted(async () => {
                         density="compact"
                         hide-details
                         single-line
-                        v-model="travel"
+                        v-model="selectedTravels"
                         :items="travels"
+                        multiple
                         item-title="title"
                         return-object
                         :menu-props="{ contentClass: 'travel-select-menu mobile-travel-select-menu' }"
                         @update:model-value="update_travel"
                         class="mobile-travel-select"
                     >
-                        <template v-slot:selection="{ item }">
-                            <div class="d-flex align-center">
-                                <span>{{ item.raw?.title || item.title }}</span>
-                            </div>
+                        <template v-slot:prepend-item>
+                            <v-list-item @click="toggleAllTravels">
+                                <template v-slot:prepend>
+                                    <v-checkbox-btn
+                                        :model-value="allTravelsSelected"
+                                        :indeterminate="someTravelsSelected"
+                                        color="primary"
+                                        readonly
+                                    ></v-checkbox-btn>
+                                </template>
+                                <v-list-item-title>Alle Reisen</v-list-item-title>
+                            </v-list-item>
+                            <v-divider></v-divider>
+                        </template>
+                        <template v-slot:selection="{ item, index }">
+                            <span v-if="index === 0">{{ item.raw?.title || item.title }}</span>
+                            <span v-if="index === 1" class="text-caption ml-1">+{{ selectedTravels.length - 1 }}</span>
                         </template>
                         <template v-slot:item="{ props, item }">
                             <v-list-item v-bind="props" :title="null" :subtitle="null">
+                                <template v-slot:prepend>
+                                    <v-icon
+                                        :icon="isTravelSelected(item.raw || item) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
+                                        size="small"
+                                        class="mr-2"
+                                    ></v-icon>
+                                </template>
                                 <v-list-item-title class="d-flex align-center">
                                     <span>{{ item.raw?.title || item.title }}</span>
                                 </v-list-item-title>
@@ -280,40 +304,47 @@ onMounted(async () => {
         <template v-slot:default>
             <v-select
                 v-if="!smAndDown"
-                :label="`${travels.length} Reisen`"
+                :label="`${selectedTravels.length} / ${travels.length} Reisen`"
                 flat
                 density="compact"
                 prepend-icon="mdi-dots-vertical"
-                v-model="travel"
+                v-model="selectedTravels"
                 :items="travels"
+                multiple
                 item-title="title"
                 return-object
                 :menu-props="{ contentClass: 'travel-select-menu' }"
                 @update:model-value="update_travel"
                 class="mt-5 ml-0 mb-0 pb-0"
             >
-                <template v-slot:selection="{ item }">
-                    <div class="d-flex align-center">
-                        <!--span class="travel-icon-slot">
-                            <v-icon
-                                v-if="item.raw?.source === 'manual'"
-                                icon="mdi-hand"
-                                size="x-small"
-                            ></v-icon>
-                        </span-->
-                        <span>{{ item.raw?.title || item.title }}</span>
-                    </div>
+                <template v-slot:prepend-item>
+                    <v-list-item @click="toggleAllTravels">
+                        <template v-slot:prepend>
+                            <v-checkbox-btn
+                                :model-value="allTravelsSelected"
+                                :indeterminate="someTravelsSelected"
+                                color="primary"
+                                readonly
+                            ></v-checkbox-btn>
+                        </template>
+                        <v-list-item-title>Alle Reisen</v-list-item-title>
+                    </v-list-item>
+                    <v-divider></v-divider>
+                </template>
+                <template v-slot:selection="{ item, index }">
+                    <span v-if="index === 0">{{ item.raw?.title || item.title }}</span>
+                    <span v-if="index === 1" class="text-caption ml-1">+{{ selectedTravels.length - 1 }}</span>
                 </template>
                 <template v-slot:item="{ props, item }">
                     <v-list-item v-bind="props" :title="null" :subtitle="null">
+                        <template v-slot:prepend>
+                            <v-icon
+                                :icon="isTravelSelected(item.raw || item) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
+                                size="small"
+                                class="mr-2"
+                            ></v-icon>
+                        </template>
                         <v-list-item-title class="d-flex align-center">
-                            <!--span class="travel-icon-slot">
-                                <v-icon
-                                    v-if="item.raw?.source === 'manual'"
-                                    icon="mdi-hand"
-                                    size="x-small"
-                                ></v-icon>
-                            </span-->
                             <span>{{ item.raw?.title || item.title }}</span>
                         </v-list-item-title>
                     </v-list-item>
@@ -323,7 +354,7 @@ onMounted(async () => {
                 variant="flat"
                 color="transparent"
                 class="appbar-distance">
-                {{ Math.round(distance) }} km
+                {{ selectedTravels.length > 1 ? `Gesamt: ${Math.round(distance)} km` : `${Math.round(distance)} km` }}
             </v-chip>
             <div class="appbar-dates">
                 <div class="appbar-date">

@@ -83,11 +83,13 @@ const dialogWidth = computed(() => {
 
 // Polyline visibility state
 const polylineVisibility = ref<Record<string, boolean>>({});
+const getMainPolylineKey = (polyline: any, index: number) =>
+  polyline.routeKey ? `main-${polyline.routeKey}` : `main-${polyline.deviceId}-${index}`;
 
 // Computed: visible polylines
 const visiblePolylines = computed(() => {
   return polylines.value.filter((polyline, index) =>
-    isPolylineVisible(`main-${polyline.deviceId}`),
+    isPolylineVisible(getMainPolylineKey(polyline, index)),
   );
 });
 
@@ -916,7 +918,7 @@ function decodeHtml(html) {
       <template v-if="togglepath && visiblePolylines.length > 0">
         <Polyline
           v-for="(polyline, index) in visiblePolylines"
-          :key="`polyline-${polyline.deviceId}-${index}`"
+          :key="getMainPolylineKey(polyline, index)"
           :options="{
             path: polyline.path,
             geodesic: true,
@@ -955,9 +957,7 @@ function decodeHtml(html) {
 
       <!-- Legend for multiple routes -->
       <div
-        v-if="
-          togglepath && (polylines.length > 1 || sideTripPolylines.length > 0)
-        "
+        v-if="togglepath && sideTripPolylines.length > 0"
         style="
           position: absolute;
           top: 10px;
@@ -1002,9 +1002,9 @@ function decodeHtml(html) {
 
         <!-- Main routes -->
         <div
-          v-for="polyline in polylines"
-          :key="`legend-${polyline.deviceId}`"
-          @click="togglePolylineVisibility(`main-${polyline.deviceId}`)"
+          v-for="(polyline, index) in polylines"
+          :key="`legend-${getMainPolylineKey(polyline, index)}`"
+          @click="togglePolylineVisibility(getMainPolylineKey(polyline, index))"
           :style="{
             display: 'flex',
             alignItems: 'center',
@@ -1014,11 +1014,11 @@ function decodeHtml(html) {
             padding: '4px 6px',
             borderRadius: '4px',
             backgroundColor: 'transparent',
-            opacity: isPolylineVisible(`main-${polyline.deviceId}`) ? 1 : 0.4,
+            opacity: isPolylineVisible(getMainPolylineKey(polyline, index)) ? 1 : 0.4,
             transition: 'all 0.2s',
           }"
           :title="
-            isPolylineVisible(`main-${polyline.deviceId}`)
+            isPolylineVisible(getMainPolylineKey(polyline, index))
               ? 'Click to hide'
               : 'Click to show'
           "
@@ -1042,7 +1042,7 @@ function decodeHtml(html) {
           </span>
           <v-icon
             :icon="
-              isPolylineVisible(`main-${polyline.deviceId}`)
+              isPolylineVisible(getMainPolylineKey(polyline, index))
                 ? 'mdi-eye'
                 : 'mdi-eye-off'
             "

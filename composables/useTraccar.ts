@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { tracdate } from '~/utils/date'
-import { getCookie } from '~/utils/crypto'
+import { getCookie, setCookie } from '~/utils/crypto'
 import type { Travel, TraccarDevice, TraccarEvent } from '~/types/traccar'
 import { useTravelCache } from './useTravelCache'
 
@@ -30,20 +30,22 @@ export const useTraccar = () => {
 
   const travels = useState<Travel[]>('travels', () => [])
   const travel = useState<Travel | null>('travel', () => null)
+  const selectedTravels = useState<Travel[]>('selectedTravels', () => [])
 
   const route = useState<any[]>('route', () => [])
   const events = useState<TraccarEvent[]>('events', () => [])
 
   // Payload builder
-  const traccarPayload = () => {
+  const traccarPayload = (travelOverride?: Travel | null) => {
+    const primaryTravel = travelOverride || selectedTravels.value[0] || travel.value
     const payload = {
-      name: travel.value?.title || 'filename',
+      name: primaryTravel?.title || 'filename',
       deviceId: device.value.id,
       from: tracdate(startdate.value),
       to: tracdate(stopdate.value),
       maxpoints: '2500',
-      travelId: travel.value?.id,
-      travelSource: travel.value?.source
+      travelId: primaryTravel?.id,
+      travelSource: primaryTravel?.source
     }
     console.log('🔧 traccarPayload() called:')
     console.log('   startdate.value:', startdate.value)
@@ -51,6 +53,58 @@ export const useTraccar = () => {
     console.log('   Formatted from:', payload.from)
     console.log('   Formatted to:', payload.to)
     return payload
+  }
+
+  const getTravelSelectionKey = (item: Travel) => {
+    const source = item.source || 'auto'
+    const id = item.id || `${item.deviceId || ''}:${item.von}:${item.bis}`
+    return `${source}:${id}`
+  }
+
+  const syncPrimaryTravel = (list: Travel[]) => {
+    const primary = list[0] || null
+    travel.value = primary
+
+    if (primary?.deviceId) {
+      device.value = {
+        ...device.value,
+        id: primary.deviceId
+      }
+    }
+
+    if (primary) {
+      startdate.value = new Date(primary.von)
+      stopdate.value = new Date(primary.bis)
+    }
+  }
+
+  const setSelectedTravels = async (items: Travel[]) => {
+    const seen = new Set<string>()
+    const deduped: Travel[] = []
+
+    for (const item of items) {
+      const key = getTravelSelectionKey(item)
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(item)
+    }
+
+    const nextSelection = deduped.length > 0
+      ? deduped
+      : (travels.value.length > 0 ? [travels.value[travels.value.length - 1]] : [])
+
+    selectedTravels.value = nextSelection
+    syncPrimaryTravel(nextSelection)
+
+    const keys = nextSelection.map(getTravelSelectionKey)
+    setCookie('travelkeys', JSON.stringify(keys), 30)
+    if (nextSelection[0]) {
+      const index = travels.value.findIndex(t => getTravelSelectionKey(t) === getTravelSelectionKey(nextSelection[0]))
+      setCookie('travelindex', String(index), 30)
+    }
+
+    const { renderMapForTravels } = useMapData()
+    await renderMapForTravels(nextSelection)
   }
 
   // Get travels
@@ -64,24 +118,37 @@ export const useTraccar = () => {
 
       travels.value = data
 
-      // Load saved travel index from cookie or use last travel
-      const savedIndex = getCookie('travelindex')
-      if (savedIndex && data[parseInt(savedIndex)]) {
-        travel.value = data[parseInt(savedIndex)]
-      } else {
-        travel.value = data[data.length - 1]
+      // Load saved travel selection keys from cookie
+      const savedKeysRaw = getCookie('travelkeys')
+      let initialSelection: Travel[] = []
+
+      if (savedKeysRaw) {
+        try {
+          const savedKeys = JSON.parse(savedKeysRaw) as string[]
+          const byKey = new Map(data.map(item => [getTravelSelectionKey(item), item]))
+          initialSelection = savedKeys.map(key => byKey.get(key)).filter(Boolean) as Travel[]
+        } catch (error) {
+          console.warn('Failed to parse saved travel selection:', error)
+        }
       }
 
-      // Update dates from selected travel
-      if (travel.value) {
-        startdate.value = new Date(travel.value.von)
-        stopdate.value = new Date(travel.value.bis)
+      if (initialSelection.length === 0) {
+        // Backward compatibility with previous single-selection cookie
+        const savedIndex = getCookie('travelindex')
+        if (savedIndex && data[parseInt(savedIndex)]) {
+          initialSelection = [data[parseInt(savedIndex)]]
+        } else if (data.length > 0) {
+          initialSelection = [data[data.length - 1]]
+        }
       }
+
+      selectedTravels.value = initialSelection
+      syncPrimaryTravel(initialSelection)
 
       // Automatically render the map after loading travels
-      const { renderMap } = useMapData()
+      const { renderMapForTravels } = useMapData()
       console.log('🚀 Initial map render')
-      await renderMap()
+      await renderMapForTravels(selectedTravels.value)
 
       return data
     } catch (error) {
@@ -260,11 +327,13 @@ export const useTraccar = () => {
     stopdate,
     travels,
     travel,
+    selectedTravels,
     route,
     events,
 
     // Methods
     traccarPayload,
+    setSelectedTravels,
     getTravels,
     getRoute,
     getEvents,
