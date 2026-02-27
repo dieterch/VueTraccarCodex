@@ -50,6 +50,18 @@ export class TravelAnalyzer {
   }
 
   /**
+   * Traccar timestamp compatibility:
+   * - v5.x events use eventTime
+   * - older payloads may still provide serverTime
+   */
+  private getEventTimestamp(event: TraccarEvent): string | null {
+    const raw = event.eventTime ?? event.serverTime
+    if (!raw || typeof raw !== 'string') return null
+    const ms = Date.parse(raw)
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null
+  }
+
+  /**
    * Check if geofence exit event is valid
    */
   private isExitValid(events: TraccarEvent[], index: number): boolean {
@@ -59,14 +71,21 @@ export class TravelAnalyzer {
     const previousEvent = events[index - 1]
     const eventMinGap = this.config.eventMinGap as number
 
-    const currentTime = new Date(currentEvent.serverTime).getTime()
-    const previousTime = new Date(previousEvent.serverTime).getTime()
+    const currentTs = this.getEventTimestamp(currentEvent)
+    const previousTs = this.getEventTimestamp(previousEvent)
+    if (!currentTs || !previousTs) {
+      console.log(`getTravels: skip exit ${index}, invalid event timestamp`)
+      return false
+    }
+
+    const currentTime = new Date(currentTs).getTime()
+    const previousTime = new Date(previousTs).getTime()
     const gapSeconds = (currentTime - previousTime) / 1000
 
     if (gapSeconds < eventMinGap) {
       console.log(
         `getTravels: skip exit ${index} (${currentEvent.type}), ` +
-        `${currentEvent.serverTime}, too close to ${previousEvent.serverTime}`
+        `${currentTs}, too close to ${previousTs}`
       )
       return false
     }
@@ -84,14 +103,21 @@ export class TravelAnalyzer {
     const nextEvent = events[index + 1]
     const eventMinGap = this.config.eventMinGap as number
 
-    const nextTime = new Date(nextEvent.serverTime).getTime()
-    const currentTime = new Date(currentEvent.serverTime).getTime()
+    const nextTs = this.getEventTimestamp(nextEvent)
+    const currentTs = this.getEventTimestamp(currentEvent)
+    if (!nextTs || !currentTs) {
+      console.log(`getTravels: skip return ${index}, invalid event timestamp`)
+      return false
+    }
+
+    const nextTime = new Date(nextTs).getTime()
+    const currentTime = new Date(currentTs).getTime()
     const gapSeconds = (nextTime - currentTime) / 1000
 
     if (gapSeconds < eventMinGap) {
       console.log(
         `getTravels: skip return ${index} (${currentEvent.type}), ` +
-        `${currentEvent.serverTime}, too close to ${nextEvent.serverTime}`
+        `${currentTs}, too close to ${nextTs}`
       )
       return false
     }
@@ -343,7 +369,13 @@ export class TravelAnalyzer {
           continue
         }
 
-        exitTime = new Date(event.serverTime)
+        const exitTs = this.getEventTimestamp(event)
+        if (!exitTs) {
+          console.log(`getTravels: skip exit ${i}, missing/invalid timestamp`)
+          continue
+        }
+
+        exitTime = new Date(exitTs)
         inTravel = true
       } else if (event.type === 'geofenceEnter' && inTravel && exitTime) {
         // Validate return
@@ -351,7 +383,13 @@ export class TravelAnalyzer {
           continue
         }
 
-        const enterTime = new Date(event.serverTime)
+        const enterTs = this.getEventTimestamp(event)
+        if (!enterTs) {
+          console.log(`getTravels: skip return ${i}, missing/invalid timestamp`)
+          continue
+        }
+
+        const enterTime = new Date(enterTs)
 
         // Filter standstills for this travel period
         const travelStandstills = filterStandstillPeriods(

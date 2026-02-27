@@ -34,7 +34,8 @@ export interface TraccarPosition {
 export interface TraccarEvent {
   id: number
   type: string
-  eventTime: string
+  eventTime?: string
+  serverTime?: string
   deviceId: number
   positionId: number
   geofenceId: number
