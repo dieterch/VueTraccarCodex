@@ -295,7 +295,7 @@ export class TravelAnalyzer {
       Object.keys(this.travelPatches).forEach(key => {
         console.log(`  - "${key}"`)
       })
-      console.log(`Address without Plus Code: "${this.stripPlusCode(travelKey)}"`)
+      console.log(`Address without Plus Code: "${stripPlusCode(travelKey)}"`)
     }
 
     // Check if excluded
