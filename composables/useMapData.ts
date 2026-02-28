@@ -1,13 +1,23 @@
-import { ref } from 'vue'
 import type { MapCenter, MapMarker, DevicePolyline, Travel } from '~/types/traccar'
 import { useTraccar } from './useTraccar'
 import { useTravelCache } from './useTravelCache'
+
+const LIVE_DEFAULT_POLLING_INTERVAL_MS = 30000
+const LIVE_MIN_POLLING_INTERVAL_MS = 5000
+const LIVE_MAX_PATH_POINTS = 120000
+const LIVE_MODE_STORAGE_KEY = 'liveModeEnabled'
+const LIVE_POLLING_STORAGE_KEY = 'livePollingIntervalMs'
+
+let livePollTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useMapData = () => {
   const { traccarPayload, selectedTravels, device } = useTraccar()
   const {
     buildTravelCacheKey,
+    buildLiveRouteCacheKey,
     getTravelSnapshot,
+    getLiveRoutePoints,
+    appendLiveRoutePoints,
     saveTravelSnapshot,
     markCachedDataUsed,
     markNetworkDataUsed
@@ -49,6 +59,266 @@ export const useMapData = () => {
   // Loading state
   const isLoading = useState<boolean>('mapLoading', () => false)
   const loadingMessage = useState<string>('mapLoadingMessage', () => 'Loading...')
+
+  // Live mode state
+  const liveMode = useState<boolean>('liveMode', () => false)
+  const livePollingIntervalMs = useState<number>('livePollingIntervalMs', () => LIVE_DEFAULT_POLLING_INTERVAL_MS)
+  const livePollingInFlight = useState<boolean>('livePollingInFlight', () => false)
+  const liveLastFetchByRouteKey = useState<Record<string, string>>('liveLastFetchByRouteKey', () => ({}))
+  const liveConfigLoaded = useState<boolean>('liveConfigLoaded', () => false)
+
+  if (process.client && !liveConfigLoaded.value) {
+    const savedLiveMode = window.localStorage.getItem(LIVE_MODE_STORAGE_KEY)
+    const savedInterval = Number(window.localStorage.getItem(LIVE_POLLING_STORAGE_KEY) || LIVE_DEFAULT_POLLING_INTERVAL_MS)
+    liveMode.value = savedLiveMode === 'true'
+    livePollingIntervalMs.value = normalizeLivePollingInterval(savedInterval)
+    liveConfigLoaded.value = true
+  }
+
+  function normalizeLivePollingInterval(value: number) {
+    if (!Number.isFinite(value)) return LIVE_DEFAULT_POLLING_INTERVAL_MS
+    return Math.max(LIVE_MIN_POLLING_INTERVAL_MS, Math.floor(value))
+  }
+
+  const persistLiveSettings = () => {
+    if (!process.client) return
+    window.localStorage.setItem(LIVE_MODE_STORAGE_KEY, String(liveMode.value))
+    window.localStorage.setItem(LIVE_POLLING_STORAGE_KEY, String(livePollingIntervalMs.value))
+  }
+
+  const clearLiveTimer = () => {
+    if (livePollTimer) {
+      clearTimeout(livePollTimer)
+      livePollTimer = null
+    }
+  }
+
+  const scheduleLivePoll = () => {
+    if (!process.client || !liveMode.value) return
+    clearLiveTimer()
+    livePollTimer = setTimeout(() => {
+      pollLiveUpdates().catch((error) => {
+        console.error('Live polling failed:', error)
+      })
+    }, livePollingIntervalMs.value)
+  }
+
+  const getLastTimestamp = (path: Array<{ timestamp?: string }> = []) => {
+    for (let i = path.length - 1; i >= 0; i--) {
+      const timestamp = path[i]?.timestamp
+      if (typeof timestamp === 'string' && timestamp) return timestamp
+    }
+    return null
+  }
+
+  const toIsoAfter = (timestamp: string | null) => {
+    if (!timestamp) return null
+    const base = new Date(timestamp)
+    if (Number.isNaN(base.getTime())) return null
+    return new Date(base.getTime() + 1).toISOString()
+  }
+
+  const getTravelDescriptor = (item: Travel) => {
+    const payload = buildPayloadFromTravel(item)
+    const source = item.source || 'auto'
+    const routePrefix = item.id
+      ? `${source}:${item.id}:`
+      : `${payload.deviceId}:${payload.from}:${payload.to}:`
+    const liveKey = buildLiveRouteCacheKey({
+      deviceId: payload.deviceId,
+      travelId: item.id || `${payload.from}:${payload.to}`,
+      travelSource: source
+    })
+    return {
+      payload,
+      routePrefix,
+      routeStateKey: `${payload.deviceId}:${routePrefix}`,
+      liveKey
+    }
+  }
+
+  const findPolylineIndex = (routePrefix: string, deviceId: number) => {
+    const byRouteKey = polylines.value.findIndex((line: any) =>
+      typeof line.routeKey === 'string' &&
+      line.routeKey.startsWith(routePrefix)
+    )
+    if (byRouteKey >= 0) return byRouteKey
+    return polylines.value.findIndex((line) => line.deviceId === deviceId && line.isMainDevice)
+  }
+
+  const toLivePoints = (items: any[]) => {
+    return items
+      .filter((pos) => (
+        pos &&
+        typeof pos.latitude === 'number' &&
+        typeof pos.longitude === 'number' &&
+        typeof pos.fixTime === 'string'
+      ))
+      .map((pos) => ({
+        lat: pos.latitude,
+        lng: pos.longitude,
+        timestamp: pos.fixTime
+      }))
+  }
+
+  const refreshPolygonFromPolylines = () => {
+    const allPoints = polylines.value.flatMap((line: DevicePolyline) => line.path || [])
+    polygone.value = allPoints.map((point) => ({ lat: point.lat, lng: point.lng }))
+  }
+
+  const calculateDistanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const earthRadiusKm = 6371
+    const toRad = (deg: number) => (deg * Math.PI) / 180
+    const dLat = toRad(b.lat - a.lat)
+    const dLng = toRad(b.lng - a.lng)
+    const lat1 = toRad(a.lat)
+    const lat2 = toRad(b.lat)
+    const h =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+    const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+    return earthRadiusKm * c
+  }
+
+  const appendPointsToPolyline = (polylineIndex: number, nextPoints: Array<{ lat: number; lng: number; timestamp: string }>) => {
+    const line = polylines.value[polylineIndex]
+    if (!line || nextPoints.length === 0) return 0
+
+    const existingPath = line.path || []
+    const lastTimestamp = getLastTimestamp(existingPath)
+    const filtered = lastTimestamp
+      ? nextPoints.filter((point) => point.timestamp > lastTimestamp)
+      : nextPoints
+
+    if (filtered.length === 0) return 0
+
+    const mergedPath = [...existingPath, ...filtered]
+    const boundedPath = mergedPath.length > LIVE_MAX_PATH_POINTS
+      ? mergedPath.slice(mergedPath.length - LIVE_MAX_PATH_POINTS)
+      : mergedPath
+
+    let incrementKm = 0
+    const distancePath = existingPath.length > 0
+      ? [existingPath[existingPath.length - 1], ...filtered]
+      : filtered
+    for (let i = 0; i < distancePath.length - 1; i++) {
+      incrementKm += calculateDistanceKm(distancePath[i], distancePath[i + 1])
+    }
+
+    polylines.value[polylineIndex] = {
+      ...line,
+      path: boundedPath
+    }
+
+    refreshPolygonFromPolylines()
+    distance.value += incrementKm
+
+    return filtered.length
+  }
+
+  const initializeLiveFromCurrentMap = async () => {
+    const active = selectedTravels.value.filter((item) => (item.source || 'auto') === 'auto')
+    for (const item of active) {
+      const descriptor = getTravelDescriptor(item)
+      const polylineIndex = findPolylineIndex(descriptor.routePrefix, descriptor.payload.deviceId)
+      if (polylineIndex < 0) continue
+
+      const line = polylines.value[polylineIndex]
+      const liveCachePoints = await getLiveRoutePoints(descriptor.liveKey)
+      const appendedCount = appendPointsToPolyline(polylineIndex, liveCachePoints)
+
+      const lastFromPath = getLastTimestamp(polylines.value[polylineIndex]?.path || line.path || [])
+      const lastFromCache = liveCachePoints.length > 0
+        ? liveCachePoints[liveCachePoints.length - 1].timestamp
+        : null
+      const finalLast = (lastFromCache && (!lastFromPath || lastFromCache > lastFromPath))
+        ? lastFromCache
+        : lastFromPath
+
+      if (finalLast) {
+        liveLastFetchByRouteKey.value = {
+          ...liveLastFetchByRouteKey.value,
+          [descriptor.routeStateKey]: finalLast
+        }
+      }
+
+      if (appendedCount > 0) {
+        console.log(`Live cache restored ${appendedCount} points for ${descriptor.routeStateKey}`)
+      }
+    }
+  }
+
+  const pollLiveUpdates = async () => {
+    if (!process.client || !liveMode.value || livePollingInFlight.value) {
+      scheduleLivePoll()
+      return
+    }
+
+    livePollingInFlight.value = true
+    try {
+      const active = selectedTravels.value.filter((item) => (item.source || 'auto') === 'auto')
+      for (const item of active) {
+        const descriptor = getTravelDescriptor(item)
+        const polylineIndex = findPolylineIndex(descriptor.routePrefix, descriptor.payload.deviceId)
+        if (polylineIndex < 0) continue
+
+        const existingLast = getLastTimestamp(polylines.value[polylineIndex]?.path || [])
+        const knownLast = liveLastFetchByRouteKey.value[descriptor.routeStateKey] || existingLast
+        const from = toIsoAfter(knownLast)
+        const to = new Date().toISOString()
+        if (!from || from >= to) continue
+
+        const response = await $fetch<any[]>('/api/route', {
+          method: 'POST',
+          body: {
+            deviceId: descriptor.payload.deviceId,
+            from,
+            to,
+            direct: true
+          }
+        })
+
+        const fresh = toLivePoints(response).filter((point) => !knownLast || point.timestamp > knownLast)
+        if (fresh.length === 0) continue
+
+        const appendedCount = appendPointsToPolyline(polylineIndex, fresh)
+        if (appendedCount > 0) {
+          await appendLiveRoutePoints(descriptor.liveKey, fresh)
+          liveLastFetchByRouteKey.value = {
+            ...liveLastFetchByRouteKey.value,
+            [descriptor.routeStateKey]: fresh[fresh.length - 1].timestamp
+          }
+          console.log(`Live update appended ${appendedCount} points for ${descriptor.routeStateKey}`)
+        }
+      }
+    } catch (error) {
+      console.error('Error polling live updates:', error)
+    } finally {
+      livePollingInFlight.value = false
+      scheduleLivePoll()
+    }
+  }
+
+  const setLivePollingInterval = (ms: number) => {
+    livePollingIntervalMs.value = normalizeLivePollingInterval(ms)
+    persistLiveSettings()
+    if (liveMode.value) {
+      scheduleLivePoll()
+    }
+  }
+
+  const setLiveModeEnabled = async (enabled: boolean) => {
+    liveMode.value = enabled
+    persistLiveSettings()
+
+    if (!enabled) {
+      clearLiveTimer()
+      return
+    }
+
+    await initializeLiveFromCurrentMap()
+    await pollLiveUpdates()
+  }
 
   // Load manual POIs
   const loadManualPOIs = async () => {
@@ -145,6 +415,11 @@ export const useMapData = () => {
 
       if (results.length > 0) {
         zoom.value = Math.min(...results.map(result => result.data.zoom || 10))
+      }
+
+      if (liveMode.value) {
+        await initializeLiveFromCurrentMap()
+        scheduleLivePoll()
       }
 
       console.log('Map rendered:', {
@@ -368,6 +643,9 @@ export const useMapData = () => {
     // POI Mode
     poiMode,
     manualPOIs,
+    liveMode,
+    livePollingIntervalMs,
+    livePollingInFlight,
 
     // Loading
     isLoading,
@@ -376,6 +654,9 @@ export const useMapData = () => {
     // Methods
     renderMap,
     renderMapForTravels,
+    pollLiveUpdates,
+    setLiveModeEnabled,
+    setLivePollingInterval,
     fetchSideTrips,
     clearSideTrips,
     loadManualPOIs

@@ -7,13 +7,32 @@ import { useAuth } from '~/composables/useAuth';
 import { useTravelCache } from '~/composables/useTravelCache';
 
 const { startdate, stopdate, travel, travels, selectedTravels, setSelectedTravels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
-const { distance, renderMap, settingsdialog, configdialog, aboutdialog, poiMode, manualtraveldialog } = useMapData();
+const {
+    distance,
+    renderMap,
+    settingsdialog,
+    configdialog,
+    aboutdialog,
+    poiMode,
+    manualtraveldialog,
+    liveMode,
+    livePollingIntervalMs,
+    livePollingInFlight,
+    setLiveModeEnabled,
+    setLivePollingInterval
+} = useMapData();
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
 const { isOffline, usingCachedTravel, cachedTravelUpdatedAt } = useTravelCache();
 const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
+const liveIntervalOptions = [
+    { title: '15s', value: 15000 },
+    { title: '30s', value: 30000 },
+    { title: '60s', value: 60000 },
+    { title: '120s', value: 120000 }
+];
 const cachedTravelUpdatedLabel = computed(() => {
     if (!cachedTravelUpdatedAt.value) return '';
     const date = new Date(cachedTravelUpdatedAt.value);
@@ -22,6 +41,7 @@ const cachedTravelUpdatedLabel = computed(() => {
 });
 const allTravelsSelected = computed(() => travels.value.length > 0 && selectedTravels.value.length === travels.value.length);
 const someTravelsSelected = computed(() => selectedTravels.value.length > 0 && !allTravelsSelected.value);
+const livePollingSecondsLabel = computed(() => `${Math.round(livePollingIntervalMs.value / 1000)}s`);
 
 function travelKey(item) {
     const source = item?.source || 'auto';
@@ -61,6 +81,16 @@ async function toggleAllTravels() {
         return;
     }
     await setSelectedTravels([...travels.value]);
+}
+
+async function handleLiveModeToggle(value) {
+    await setLiveModeEnabled(Boolean(value));
+}
+
+function handleLiveIntervalChange(value) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return;
+    setLivePollingInterval(next);
 }
 
 const menuitems = computed(() => {
@@ -382,6 +412,43 @@ onMounted(async () => {
             >
                 Cache {{ cachedTravelUpdatedLabel }}
             </v-chip>
+            <v-menu location="bottom end" :close-on-content-click="false">
+                <template v-slot:activator="{ props }">
+                    <v-btn
+                        v-bind="props"
+                        :icon="liveMode ? 'mdi-access-point-check' : 'mdi-access-point'"
+                        class="ml-1"
+                        nosize="small"
+                        :color="liveMode ? 'success' : undefined"
+                    ></v-btn>
+                </template>
+                <v-card min-width="240" class="pa-3">
+                    <v-switch
+                        :model-value="liveMode"
+                        :loading="livePollingInFlight"
+                        color="success"
+                        inset
+                        hide-details
+                        density="compact"
+                        label="Live Mode"
+                        @update:model-value="handleLiveModeToggle"
+                    ></v-switch>
+                    <v-select
+                        class="mt-2"
+                        density="compact"
+                        hide-details
+                        label="Polling Interval"
+                        :items="liveIntervalOptions"
+                        item-title="title"
+                        item-value="value"
+                        :model-value="livePollingIntervalMs"
+                        @update:model-value="handleLiveIntervalChange"
+                    ></v-select>
+                    <div class="text-caption mt-2 text-grey">
+                        Status: {{ liveMode ? `Aktiv (${livePollingSecondsLabel})` : 'Aus' }}
+                    </div>
+                </v-card>
+            </v-menu>
             <v-btn
                 icon="mdi-reload"
                 class="ml-1 appbar-reload"

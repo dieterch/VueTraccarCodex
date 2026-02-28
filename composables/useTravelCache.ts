@@ -7,6 +7,12 @@ type TravelCachePayload = {
   manualPois?: any[]
 }
 
+type LiveRoutePoint = {
+  lat: number
+  lng: number
+  timestamp: string
+}
+
 type TravelSnapshot = {
   version: number
   savedAt: string
@@ -25,6 +31,10 @@ const CACHE_VERSION = 1
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const CACHE_MAX_SNAPSHOTS = 20
 const CACHE_KEY_PREFIX = 'travel:'
+const LIVE_ROUTE_KEY_PREFIX = 'live-route:'
+const LIVE_ROUTE_TTL_MS = 45 * 24 * 60 * 60 * 1000
+const LIVE_ROUTE_MAX_KEYS = 16
+const LIVE_ROUTE_MAX_POINTS_PER_KEY = 120000
 const ONLINE_LISTENER_KEY = 'travelCacheOnlineListenerInit'
 
 const isTravelSnapshot = (value: any): value is TravelSnapshot => {
@@ -62,6 +72,13 @@ export const useTravelCache = () => {
     const fallbackId = `auto-${deviceId}-${from}-${to}`
     const travelId = input.travelId || fallbackId
     return `${CACHE_KEY_PREFIX}${source}:${travelId}:${deviceId}:${from}:${to}`
+  }
+
+  const buildLiveRouteCacheKey = (input: TravelCacheKeyInput) => {
+    const source = input.travelSource || 'auto'
+    const deviceId = input.deviceId || 0
+    const travelId = input.travelId || `device-${deviceId}`
+    return `${LIVE_ROUTE_KEY_PREFIX}${source}:${travelId}:${deviceId}`
   }
 
   const markCachedDataUsed = (savedAt: string | null) => {
@@ -104,6 +121,33 @@ export const useTravelCache = () => {
     }
   }
 
+  const pruneLiveRouteCaches = async () => {
+    if (!process.client) return
+    const all = await entries()
+    const routeEntries = all
+      .filter(([key, value]) => String(key).startsWith(LIVE_ROUTE_KEY_PREFIX) && isTravelSnapshot(value))
+      .map(([key, value]) => ({ key: String(key), snapshot: value as TravelSnapshot }))
+
+    const now = Date.now()
+    for (const entry of routeEntries) {
+      const savedAt = new Date(entry.snapshot.savedAt).getTime()
+      if (!Number.isFinite(savedAt) || now - savedAt > LIVE_ROUTE_TTL_MS) {
+        await del(entry.key)
+      }
+    }
+
+    const fresh = (await entries())
+      .filter(([key, value]) => String(key).startsWith(LIVE_ROUTE_KEY_PREFIX) && isTravelSnapshot(value))
+      .map(([key, value]) => ({ key: String(key), snapshot: value as TravelSnapshot }))
+      .sort((a, b) => new Date(b.snapshot.savedAt).getTime() - new Date(a.snapshot.savedAt).getTime())
+
+    if (fresh.length <= LIVE_ROUTE_MAX_KEYS) return
+
+    for (const entry of fresh.slice(LIVE_ROUTE_MAX_KEYS)) {
+      await del(entry.key)
+    }
+  }
+
   const getTravelSnapshot = async (cacheKey: string): Promise<TravelSnapshot | null> => {
     if (!process.client) return null
     const snapshot = await get(cacheKey)
@@ -134,15 +178,51 @@ export const useTravelCache = () => {
     await pruneTravelSnapshots()
   }
 
+  const getLiveRoutePoints = async (cacheKey: string): Promise<LiveRoutePoint[]> => {
+    if (!process.client) return []
+    const snapshot = await getTravelSnapshot(cacheKey)
+    const points = snapshot?.payload?.route
+    if (!Array.isArray(points)) return []
+    return points
+      .filter((point: any) => (
+        point &&
+        typeof point.lat === 'number' &&
+        typeof point.lng === 'number' &&
+        typeof point.timestamp === 'string'
+      ))
+      .map((point: any) => ({
+        lat: point.lat,
+        lng: point.lng,
+        timestamp: point.timestamp
+      }))
+  }
+
+  const appendLiveRoutePoints = async (
+    cacheKey: string,
+    nextPoints: LiveRoutePoint[],
+    maxPoints = LIVE_ROUTE_MAX_POINTS_PER_KEY
+  ) => {
+    if (!process.client || nextPoints.length === 0) return
+    const existing = await getLiveRoutePoints(cacheKey)
+    const merged = [...existing, ...nextPoints]
+    const bounded = merged.length > maxPoints ? merged.slice(merged.length - maxPoints) : merged
+    await saveTravelSnapshot(cacheKey, { route: bounded })
+    await pruneLiveRouteCaches()
+  }
+
   return {
     isOffline,
     usingCachedTravel,
     cachedTravelUpdatedAt,
     buildTravelCacheKey,
+    buildLiveRouteCacheKey,
     markCachedDataUsed,
     markNetworkDataUsed,
     getTravelSnapshot,
+    getLiveRoutePoints,
+    appendLiveRoutePoints,
     saveTravelSnapshot,
-    pruneTravelSnapshots
+    pruneTravelSnapshots,
+    pruneLiveRouteCaches
   }
 }
