@@ -5,6 +5,7 @@ import { useTraccar } from '~/composables/useTraccar';
 import { useMapData } from '~/composables/useMapData';
 import { useAuth } from '~/composables/useAuth';
 import { useTravelCache } from '~/composables/useTravelCache';
+import { useMapProvider } from '~/composables/useMapProvider';
 
 const { startdate, stopdate, travel, travels, selectedTravels, setSelectedTravels, getTravels, downloadKml, rebuildCache, checkCacheStatus, prefetchRoute, device } = useTraccar();
 const {
@@ -24,6 +25,7 @@ const {
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
 const { isOffline, usingCachedTravel, cachedTravelUpdatedAt } = useTravelCache();
+const { mapProvider, mapAdapters, setMapProvider } = useMapProvider();
 const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
@@ -42,6 +44,9 @@ const cachedTravelUpdatedLabel = computed(() => {
 const allTravelsSelected = computed(() => travels.value.length > 0 && selectedTravels.value.length === travels.value.length);
 const someTravelsSelected = computed(() => selectedTravels.value.length > 0 && !allTravelsSelected.value);
 const livePollingSecondsLabel = computed(() => `${Math.round(livePollingIntervalMs.value / 1000)}s`);
+const mapProviderOptions = computed(() =>
+    mapAdapters.map(adapter => ({ title: adapter.label, value: adapter.id }))
+);
 
 function travelKey(item) {
     const source = item?.source || 'auto';
@@ -91,6 +96,12 @@ function handleLiveIntervalChange(value) {
     const next = Number(value);
     if (!Number.isFinite(next)) return;
     setLivePollingInterval(next);
+}
+
+function handleMapProviderChange(value) {
+    if (value === 'google' || value === 'osm') {
+        setMapProvider(value);
+    }
 }
 
 const menuitems = computed(() => {
@@ -251,7 +262,7 @@ onMounted(async () => {
         :elevation="5"
         >
         <template v-slot:prepend>
-            <v-menu location="bottom" :close-on-content-click="!smAndDown">
+            <v-menu location="bottom" :close-on-content-click="false">
                 <template v-slot:activator="{ props: menu }">
                     <v-app-bar-nav-icon
                         v-bind="menu"
@@ -260,6 +271,22 @@ onMounted(async () => {
                     </v-app-bar-nav-icon>
                 </template>
                 <v-list density="compact">
+                <v-list-item class="map-provider-menu-item">
+                    <v-select
+                        density="comfortable"
+                        hide-details
+                        variant="outlined"
+                        prepend-inner-icon="mdi-map"
+                        label="Kartenanbieter"
+                        :items="mapProviderOptions"
+                        item-title="title"
+                        item-value="value"
+                        :model-value="mapProvider"
+                        class="map-provider-menu-select"
+                        @update:model-value="handleMapProviderChange"
+                    ></v-select>
+                </v-list-item>
+                <v-divider></v-divider>
                 <v-list-item v-if="smAndDown">
                     <v-select
                         :label="''"
@@ -530,6 +557,30 @@ onMounted(async () => {
 
 .mobile-travel-select {
   min-width: 220px;
+}
+
+.map-provider-menu-item {
+  overflow: visible;
+  min-height: 74px !important;
+  align-items: flex-start !important;
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+
+.map-provider-menu-select {
+  margin-top: 3px;
+}
+
+.map-provider-menu-item :deep(.v-list-item__content) {
+  overflow: visible !important;
+  width: 100%;
+}
+
+.map-provider-menu-item :deep(.v-input),
+.map-provider-menu-item :deep(.v-field),
+.map-provider-menu-item :deep(.v-field__overlay),
+.map-provider-menu-item :deep(.v-field__field) {
+  overflow: visible !important;
 }
 
 :deep(.travel-select-menu .v-list-item__content) {
