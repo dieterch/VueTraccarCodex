@@ -39,6 +39,7 @@ const standstillAdjustments = ref<Record<string, { start: number; end: number }>
 const wordpressPosts = ref<Record<string, any[]>>({})
 const currentAdjustmentLocation = ref<any>(null)
 const adjustmentDialog = ref(false)
+const polylineVisibility = ref<Record<string, boolean>>({})
 
 let L: any = null
 let map: any = null
@@ -51,10 +52,35 @@ const isCtrlPressed = ref(false)
 
 const renderedPolylines = computed(() => {
   return [
-    ...polylines.value.map((line) => ({ ...line, opacity: 1 })),
-    ...sideTripPolylines.value.map((line) => ({ ...line, opacity: 0.8 }))
+    ...visibleMainPolylines.value.map((line) => ({ ...line, opacity: 1 })),
+    ...visibleSideTripPolylines.value.map((line) => ({ ...line, opacity: 0.8 }))
   ]
 })
+
+const getMainPolylineKey = (polyline: any, index: number) => (
+  polyline.routeKey ? `main-${polyline.routeKey}` : `main-${polyline.deviceId}-${index}`
+)
+
+function isPolylineVisible(key: string) {
+  const visible = polylineVisibility.value[key]
+  return visible === undefined ? true : visible
+}
+
+function togglePolylineVisibility(key: string) {
+  const current = polylineVisibility.value[key] ?? true
+  polylineVisibility.value = {
+    ...polylineVisibility.value,
+    [key]: !current
+  }
+}
+
+const visibleMainPolylines = computed(() => (
+  polylines.value.filter((polyline, index) => isPolylineVisible(getMainPolylineKey(polyline, index)))
+))
+
+const visibleSideTripPolylines = computed(() => (
+  sideTripPolylines.value.filter((polyline, index) => isPolylineVisible(`side-${polyline.deviceId}-${index}`))
+))
 
 function decodeHtml(html: string) {
   const txt = document.createElement('textarea')
@@ -197,6 +223,12 @@ async function adjustStandstillTime(standstillKey: string, type: 'start' | 'end'
   } catch (error) {
     console.error('Error saving standstill adjustment:', error)
   } finally {
+    if (loadedSideTrips.value[standstillKey]) {
+      const location = getLocationByKey(standstillKey)
+      if (location) {
+        await loadStandstillSideTrips(location, true)
+      }
+    }
     updateMarkerPopupContent(standstillKey)
   }
 }
@@ -215,6 +247,12 @@ async function resetStandstillAdjustments(standstillKey: string) {
   } catch (error) {
     console.error('Error resetting standstill adjustment:', error)
   } finally {
+    if (loadedSideTrips.value[standstillKey]) {
+      const location = getLocationByKey(standstillKey)
+      if (location) {
+        await loadStandstillSideTrips(location, true)
+      }
+    }
     updateMarkerPopupContent(standstillKey)
   }
 }
@@ -352,12 +390,18 @@ async function loadStandstillSideTrips(location: any, isReload = false) {
   }
 }
 
+function clearAllSideTrips() {
+  clearSideTrips()
+  loadedSideTrips.value = {}
+}
+
 function openAdjustmentDialog(location: any) {
   currentAdjustmentLocation.value = location
   if (!standstillAdjustments.value[location.key]) {
     standstillAdjustments.value[location.key] = { start: 0, end: 0 }
   }
   adjustmentDialog.value = true
+  loadStandstillSideTrips(location)
 }
 
 const popupHtml = (location: any) => {
@@ -420,24 +464,42 @@ const popupHtml = (location: any) => {
 }
 
 const bindPopupActions = (marker: any, location: any) => {
+  const clickHandlerKey = '__osmPopupClickHandler'
+
   marker.on('popupopen', (event: any) => {
     const root = event?.popup?.getElement?.() as HTMLElement | null
     if (!root) return
     loadStandstillAdjustment(location.key)
     loadWordPressPosts(location.key)
 
-    root.querySelectorAll('[data-action]').forEach((button) => {
-      button.addEventListener('click', async (ev) => {
-        ev.preventDefault()
-        ev.stopPropagation()
-        const action = (button as HTMLElement).dataset.action
-        if (action === 'notes') await openmddialog(location.key)
-        if (action === 'sidetrips') await loadStandstillSideTrips(location)
-        if (action === 'copy') await copyToClipboard(location.key)
-        if (action === 'adjust') openAdjustmentDialog(location)
-        if (action === 'delete') await deleteManualPOI(location)
-      })
-    })
+    // Delegate clicks from popup root so handlers survive setPopupContent() updates.
+    const onPopupClick = async (ev: Event) => {
+      const target = ev.target as HTMLElement | null
+      const actionEl = target?.closest?.('[data-action]') as HTMLElement | null
+      if (!actionEl) return
+
+      ev.preventDefault()
+      ev.stopPropagation()
+      const action = actionEl.dataset.action
+
+      if (action === 'notes') await openmddialog(location.key)
+      if (action === 'sidetrips') await loadStandstillSideTrips(location)
+      if (action === 'copy') await copyToClipboard(location.key)
+      if (action === 'adjust') openAdjustmentDialog(location)
+      if (action === 'delete') await deleteManualPOI(location)
+    }
+
+    ;(marker as any)[clickHandlerKey] = onPopupClick
+    root.addEventListener('click', onPopupClick)
+  })
+
+  marker.on('popupclose', (event: any) => {
+    const root = event?.popup?.getElement?.() as HTMLElement | null
+    const handler = (marker as any)[clickHandlerKey]
+    if (root && handler) {
+      root.removeEventListener('click', handler)
+    }
+    delete (marker as any)[clickHandlerKey]
   })
 }
 
@@ -566,6 +628,57 @@ watch([center, zoom], () => syncViewport(), { deep: true })
     </div>
     <div ref="mapContainer" class="leaflet-map"></div>
 
+    <div
+      v-if="togglepath && sideTripPolylines.length > 0"
+      class="leaflet-legend"
+    >
+      <div class="leaflet-legend-title">
+        Routes
+        <v-btn
+          icon="mdi-close"
+          size="x-small"
+          variant="text"
+          @click="clearAllSideTrips"
+          title="Clear side trips"
+        ></v-btn>
+      </div>
+      <div class="leaflet-legend-subtitle">Click to show/hide routes</div>
+
+      <div
+        v-for="(polyline, index) in polylines"
+        :key="`legend-${getMainPolylineKey(polyline, index)}`"
+        class="leaflet-legend-row"
+        :style="{ opacity: isPolylineVisible(getMainPolylineKey(polyline, index)) ? 1 : 0.4 }"
+        @click="togglePolylineVisibility(getMainPolylineKey(polyline, index))"
+      >
+        <div
+          class="leaflet-legend-line"
+          :style="{ backgroundColor: polyline.color, height: `${polyline.lineWeight}px` }"
+        ></div>
+        <span>
+          {{ polyline.deviceName }}
+          <span v-if="polyline.isMainDevice" class="leaflet-legend-tag">(main)</span>
+        </span>
+      </div>
+
+      <div
+        v-for="(polyline, index) in sideTripPolylines"
+        :key="`legend-side-${polyline.deviceId}-${index}`"
+        class="leaflet-legend-row"
+        :style="{ opacity: isPolylineVisible(`side-${polyline.deviceId}-${index}`) ? 0.85 : 0.3 }"
+        @click="togglePolylineVisibility(`side-${polyline.deviceId}-${index}`)"
+      >
+        <div
+          class="leaflet-legend-line"
+          :style="{ backgroundColor: polyline.color, height: `${polyline.lineWeight}px` }"
+        ></div>
+        <span>
+          {{ polyline.deviceName }}
+          <span class="leaflet-legend-tag">(side trip)</span>
+        </span>
+      </div>
+    </div>
+
     <v-dialog v-model="adjustmentDialog" max-width="640">
       <v-card v-if="currentAdjustmentLocation">
         <v-card-title class="text-h6">
@@ -582,6 +695,8 @@ watch([center, zoom], () => syncViewport(), { deep: true })
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -720)">-12h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -60)">-1h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -5)">-5m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 5)">+5m</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 15)">+15m</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 60)">+1h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 720)">+12h</v-btn>
@@ -595,6 +710,8 @@ watch([center, zoom], () => syncViewport(), { deep: true })
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -720)">-12h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -60)">-1h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -5)">-5m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 5)">+5m</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 15)">+15m</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 60)">+1h</v-btn>
                 <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 720)">+12h</v-btn>
@@ -650,6 +767,51 @@ watch([center, zoom], () => syncViewport(), { deep: true })
   margin-top: 12px;
   color: #1976d2;
   font-weight: 500;
+}
+
+.leaflet-legend {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  max-width: 260px;
+}
+
+.leaflet-legend-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.leaflet-legend-subtitle {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.leaflet-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.leaflet-legend-line {
+  width: 22px;
+  border-radius: 2px;
+}
+
+.leaflet-legend-tag {
+  color: #888;
+  font-size: 12px;
 }
 
 .adjust-grid {
@@ -755,4 +917,3 @@ watch([center, zoom], () => syncViewport(), { deep: true })
   color: #37474f;
 }
 </style>
-
