@@ -33,12 +33,20 @@ const mode = ref('light')
 const content = ref('')
 const file = ref('')
 
+const loadingSideTrips = ref<Record<string, boolean>>({})
+const loadedSideTrips = ref<Record<string, boolean>>({})
+const standstillAdjustments = ref<Record<string, { start: number; end: number }>>({})
+const wordpressPosts = ref<Record<string, any[]>>({})
+const currentAdjustmentLocation = ref<any>(null)
+const adjustmentDialog = ref(false)
+
 let L: any = null
 let map: any = null
 let polylineLayerGroup: any = null
 let markerLayerGroup: any = null
 let activeTimestampPopup: any = null
 
+const markerByKey = new Map<string, any>()
 const isCtrlPressed = ref(false)
 
 const renderedPolylines = computed(() => {
@@ -47,6 +55,12 @@ const renderedPolylines = computed(() => {
     ...sideTripPolylines.value.map((line) => ({ ...line, opacity: 0.8 }))
   ]
 })
+
+function decodeHtml(html: string) {
+  const txt = document.createElement('textarea')
+  txt.innerHTML = html
+  return txt.value
+}
 
 function handleKeyDown(e: KeyboardEvent) {
   if (e.key === 'Control' || e.key === 'Meta' || e.metaKey || e.ctrlKey) {
@@ -109,12 +123,107 @@ function findNearestPolylinePoint(lat: number, lng: number) {
   return nearest
 }
 
+function getAdjustedTime(dateString: string, adjustmentMinutes: number): string {
+  const date = new Date(dateString)
+  date.setMinutes(date.getMinutes() + adjustmentMinutes)
+  return date.toISOString().slice(0, 16).replace('T', ' ')
+}
+
+function getLocationByKey(key: string) {
+  return locations.value.find((location) => location.key === key)
+}
+
+function updateMarkerPopupContent(locationKey: string) {
+  const marker = markerByKey.get(locationKey)
+  const location = getLocationByKey(locationKey)
+  if (!marker || !location) return
+  marker.setPopupContent(popupHtml(location))
+}
+
+async function loadWordPressPosts(locationKey: string) {
+  try {
+    const posts = await $fetch<any[]>(`/api/wordpress/posts/${locationKey}`)
+    wordpressPosts.value = {
+      ...wordpressPosts.value,
+      [locationKey]: posts
+    }
+  } catch (error) {
+    console.error('Error loading WordPress posts:', error)
+    wordpressPosts.value = {
+      ...wordpressPosts.value,
+      [locationKey]: []
+    }
+  } finally {
+    updateMarkerPopupContent(locationKey)
+  }
+}
+
+async function loadStandstillAdjustment(standstillKey: string) {
+  try {
+    const response = await $fetch<any>('/api/standstill-adjustments', {
+      params: { key: standstillKey }
+    })
+    if (response.success && response.adjustment) {
+      standstillAdjustments.value[standstillKey] = {
+        start: response.adjustment.start_adjustment_minutes || 0,
+        end: response.adjustment.end_adjustment_minutes || 0
+      }
+    } else {
+      standstillAdjustments.value[standstillKey] = { start: 0, end: 0 }
+    }
+  } catch (error) {
+    console.error('Error loading standstill adjustment:', error)
+    standstillAdjustments.value[standstillKey] = { start: 0, end: 0 }
+  } finally {
+    updateMarkerPopupContent(standstillKey)
+  }
+}
+
+async function adjustStandstillTime(standstillKey: string, type: 'start' | 'end', delta: number) {
+  if (!standstillAdjustments.value[standstillKey]) {
+    standstillAdjustments.value[standstillKey] = { start: 0, end: 0 }
+  }
+  standstillAdjustments.value[standstillKey][type] += delta
+
+  try {
+    await $fetch('/api/standstill-adjustments', {
+      method: 'POST',
+      body: {
+        standstillKey,
+        startAdjustmentMinutes: standstillAdjustments.value[standstillKey].start,
+        endAdjustmentMinutes: standstillAdjustments.value[standstillKey].end
+      }
+    })
+  } catch (error) {
+    console.error('Error saving standstill adjustment:', error)
+  } finally {
+    updateMarkerPopupContent(standstillKey)
+  }
+}
+
+async function resetStandstillAdjustments(standstillKey: string) {
+  standstillAdjustments.value[standstillKey] = { start: 0, end: 0 }
+  try {
+    await $fetch('/api/standstill-adjustments', {
+      method: 'POST',
+      body: {
+        standstillKey,
+        startAdjustmentMinutes: 0,
+        endAdjustmentMinutes: 0
+      }
+    })
+  } catch (error) {
+    console.error('Error resetting standstill adjustment:', error)
+  } finally {
+    updateMarkerPopupContent(standstillKey)
+  }
+}
+
 async function reverseGeocodePOI(lat: number, lng: number) {
   const apiKey = config.public.googleMapsApiKey
   if (!apiKey) {
     return { country: 'Unknown', address: `${lat.toFixed(6)}, ${lng.toFixed(6)}` }
   }
-
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
     const response = await $fetch<any>(url)
@@ -129,7 +238,6 @@ async function reverseGeocodePOI(lat: number, lng: number) {
   } catch (error) {
     console.error('Geocoding error:', error)
   }
-
   return { country: 'Unknown', address: `${lat.toFixed(6)}, ${lng.toFixed(6)}` }
 }
 
@@ -137,7 +245,6 @@ async function createManualPOI(lat: number, lng: number, timestamp: string, devi
   try {
     isLoading.value = true
     loadingMessage.value = 'Creating POI...'
-
     const currentCenter = map?.getCenter?.()
     const currentZoom = map?.getZoom?.()
 
@@ -182,7 +289,7 @@ async function deleteManualPOI(location: any) {
     try {
       await $fetch(`/api/standstill-adjustments/${location.key}`, { method: 'DELETE' })
     } catch {
-      // ignore if no adjustments exist
+      // ignore
     }
     await $fetch(`/api/manual-pois/${location.poiId}`, { method: 'DELETE' })
     clearSideTrips()
@@ -195,8 +302,12 @@ async function deleteManualPOI(location: any) {
   }
 }
 
-async function loadStandstillSideTrips(location: any) {
+async function loadStandstillSideTrips(location: any, isReload = false) {
   try {
+    loadingSideTrips.value[location.key] = true
+    updateMarkerPopupContent(location.key)
+    if (isReload) clearSideTrips()
+
     const settingsResponse = await $fetch<any>('/api/side-trips/config')
     if (!settingsResponse.success || !settingsResponse.settings.sideTripEnabled) {
       alert(
@@ -219,41 +330,91 @@ async function loadStandstillSideTrips(location: any) {
       return
     }
 
+    const adjustment = standstillAdjustments.value[location.key] || { start: 0, end: 0 }
     const fromDate = new Date(location.von)
     const toDate = new Date(location.bis)
     if (location.isPOI || location.period === 0) {
       fromDate.setMinutes(fromDate.getMinutes() - 15)
       toDate.setMinutes(toDate.getMinutes() + 15)
     }
+    fromDate.setMinutes(fromDate.getMinutes() + adjustment.start)
+    toDate.setMinutes(toDate.getMinutes() + adjustment.end)
     const fromAdjusted = fromDate.toISOString().slice(0, 16).replace('T', ' ')
     const toAdjusted = toDate.toISOString().slice(0, 16).replace('T', ' ')
     await fetchSideTrips(fromAdjusted, toAdjusted, deviceIds)
+    loadedSideTrips.value[location.key] = true
   } catch (error) {
     console.error('Error loading side trips:', error)
     alert('Failed to load side trips.')
+  } finally {
+    loadingSideTrips.value[location.key] = false
+    updateMarkerPopupContent(location.key)
   }
 }
 
+function openAdjustmentDialog(location: any) {
+  currentAdjustmentLocation.value = location
+  if (!standstillAdjustments.value[location.key]) {
+    standstillAdjustments.value[location.key] = { start: 0, end: 0 }
+  }
+  adjustmentDialog.value = true
+}
+
 const popupHtml = (location: any) => {
-  const title = stripPlusCode(String(location?.address || '').split(',')[0] || location?.title || 'Location')
+  const posts = wordpressPosts.value[location.key]
+  const adjustment = standstillAdjustments.value[location.key] || { start: 0, end: 0 }
+  const status = loadingSideTrips.value[location.key]
+    ? 'Lade Ausflüge...'
+    : (loadedSideTrips.value[location.key] ? 'Ausflüge geladen' : '')
+
+  const postsBlock = posts === undefined
+    ? `<div class="osm-muted">Lade Reiseberichte...</div>`
+    : posts.length === 0
+      ? `<div class="osm-muted">Noch keine Reiseberichte für diesen Ort</div>`
+      : `
+        <div class="osm-posts">
+          ${posts.slice(0, 3).map((post) => `
+            <div class="osm-post">
+              <a href="${post.link}" target="_blank">${decodeHtml(post.title.rendered)}</a>
+              <div class="osm-post-excerpt">
+                ${decodeHtml(String(post.excerpt.rendered || '').replace(/<[^>]*>/g, '').substring(0, 140))}...
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `
+
   const details = location?.isPOI
     ? `<div>am: ${new Date(location.von).toLocaleString()}</div>`
     : `<div>von: ${location.von}</div><div>bis: ${location.bis}</div><div>Dauer: ${location.period}h</div>`
+
+  const adjustButton = isAdmin.value
+    ? `<button class="osm-btn" data-action="adjust">Zeit anpassen</button>`
+    : ''
+
   const deleteButton = isAdmin.value && location.isPOI
     ? `<button class="osm-btn osm-delete" data-action="delete">POI löschen</button>`
     : ''
+
   return `
     <div class="osm-popup" data-location-key="${location.key}">
-      <h4>${title}</h4>
+      <h4>${stripPlusCode(String(location?.address || '').split(',')[0] || location?.title || 'Location')}</h4>
       <div class="osm-addr">${location.address || ''}</div>
       ${details}
       <div><a href="${GoogleMapsLink(location.lat, location.lng)}" target="_blank">Link zu Google Maps</a></div>
+      <div class="osm-adjust">
+        Anpassung: Start ${adjustment.start}m, Ende ${adjustment.end}m
+      </div>
+      <div class="osm-status">${status}</div>
       <div class="osm-actions">
         <button class="osm-btn" data-action="notes">Notizen</button>
         <button class="osm-btn" data-action="sidetrips">Ausflüge</button>
         <button class="osm-btn" data-action="copy">Marker kopieren</button>
+        ${adjustButton}
         ${deleteButton}
       </div>
+      <hr class="osm-divider" />
+      ${postsBlock}
     </div>
   `
 }
@@ -262,6 +423,9 @@ const bindPopupActions = (marker: any, location: any) => {
   marker.on('popupopen', (event: any) => {
     const root = event?.popup?.getElement?.() as HTMLElement | null
     if (!root) return
+    loadStandstillAdjustment(location.key)
+    loadWordPressPosts(location.key)
+
     root.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', async (ev) => {
         ev.preventDefault()
@@ -270,6 +434,7 @@ const bindPopupActions = (marker: any, location: any) => {
         if (action === 'notes') await openmddialog(location.key)
         if (action === 'sidetrips') await loadStandstillSideTrips(location)
         if (action === 'copy') await copyToClipboard(location.key)
+        if (action === 'adjust') openAdjustmentDialog(location)
         if (action === 'delete') await deleteManualPOI(location)
       })
     })
@@ -315,6 +480,7 @@ const drawPolylines = () => {
 const drawMarkers = () => {
   if (!leafletReady.value || !markerLayerGroup) return
   markerLayerGroup.clearLayers()
+  markerByKey.clear()
   if (!togglemarkers.value) return
 
   for (const location of locations.value) {
@@ -324,9 +490,10 @@ const drawMarkers = () => {
       weight: 2,
       fillOpacity: 0.9
     })
-    marker.bindPopup(popupHtml(location), { maxWidth: 420 })
+    marker.bindPopup(popupHtml(location), { maxWidth: 440 })
     bindPopupActions(marker, location)
     markerLayerGroup.addLayer(marker)
+    markerByKey.set(location.key, marker)
   }
 }
 
@@ -399,6 +566,52 @@ watch([center, zoom], () => syncViewport(), { deep: true })
     </div>
     <div ref="mapContainer" class="leaflet-map"></div>
 
+    <v-dialog v-model="adjustmentDialog" max-width="640">
+      <v-card v-if="currentAdjustmentLocation">
+        <v-card-title class="text-h6">
+          Ausflugszeitraum anpassen
+        </v-card-title>
+        <v-card-subtitle>
+          {{ stripPlusCode(currentAdjustmentLocation.address?.split(',')[0] || '') }}
+        </v-card-subtitle>
+        <v-card-text>
+          <div class="adjust-grid">
+            <div>
+              <div class="adjust-label">Start</div>
+              <div class="adjust-buttons">
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -720)">-12h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -60)">-1h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 15)">+15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 60)">+1h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 720)">+12h</v-btn>
+              </div>
+              <div class="adjust-time">{{ getAdjustedTime(currentAdjustmentLocation.von, standstillAdjustments[currentAdjustmentLocation.key]?.start || 0) }}</div>
+            </div>
+
+            <div>
+              <div class="adjust-label">Ende</div>
+              <div class="adjust-buttons">
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -720)">-12h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -60)">-1h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 15)">+15m</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 60)">+1h</v-btn>
+                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 720)">+12h</v-btn>
+              </div>
+              <div class="adjust-time">{{ getAdjustedTime(currentAdjustmentLocation.bis, standstillAdjustments[currentAdjustmentLocation.key]?.end || 0) }}</div>
+            </div>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="resetStandstillAdjustments(currentAdjustmentLocation.key)">Reset</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn color="primary" @click="loadStandstillSideTrips(currentAdjustmentLocation, true)">Ausflüge neu laden</v-btn>
+          <v-btn color="secondary" variant="text" @click="adjustmentDialog = false">Schließen</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <MDDialog
       :content="content"
       :file="file"
@@ -438,6 +651,29 @@ watch([center, zoom], () => syncViewport(), { deep: true })
   color: #1976d2;
   font-weight: 500;
 }
+
+.adjust-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.adjust-label {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.adjust-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.adjust-time {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #37474f;
+}
 </style>
 
 <style>
@@ -453,6 +689,17 @@ watch([center, zoom], () => syncViewport(), { deep: true })
   font-size: 12px;
   color: #555;
   margin-bottom: 8px;
+}
+
+.osm-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #1976d2;
+}
+
+.osm-adjust {
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .osm-actions {
@@ -478,6 +725,34 @@ watch([center, zoom], () => syncViewport(), { deep: true })
 .osm-delete {
   border-color: #ef9a9a;
   color: #b71c1c;
+}
+
+.osm-divider {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid #eceff1;
+}
+
+.osm-muted {
+  color: #888;
+  font-size: 12px;
+}
+
+.osm-posts {
+  display: grid;
+  gap: 8px;
+}
+
+.osm-post a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.osm-post-excerpt {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #37474f;
 }
 </style>
 
