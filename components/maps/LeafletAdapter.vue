@@ -692,14 +692,14 @@ watch([center, zoom], () => syncViewport(), { deep: true })
             <div>
               <div class="adjust-label">Start</div>
               <div class="adjust-buttons">
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -720)">-12h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -60)">-1h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -15)">-15m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -5)">-5m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 5)">+5m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 15)">+15m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 60)">+1h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 720)">+12h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -720)">-12h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -60)">-1h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', -5)">-5m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 5)">+5m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 15)">+15m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 60)">+1h</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'start', 720)">+12h</v-btn>
               </div>
               <div class="adjust-time">{{ getAdjustedTime(currentAdjustmentLocation.von, standstillAdjustments[currentAdjustmentLocation.key]?.start || 0) }}</div>
             </div>
@@ -707,14 +707,14 @@ watch([center, zoom], () => syncViewport(), { deep: true })
             <div>
               <div class="adjust-label">Ende</div>
               <div class="adjust-buttons">
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -720)">-12h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -60)">-1h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -15)">-15m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -5)">-5m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 5)">+5m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 15)">+15m</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 60)">+1h</v-btn>
-                <v-btn size="small" variant="outlined" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 720)">+12h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -720)">-12h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -60)">-1h</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -15)">-15m</v-btn>
+                <v-btn size="small" variant="outlined" color="error" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', -5)">-5m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 5)">+5m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 15)">+15m</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 60)">+1h</v-btn>
+                <v-btn size="small" variant="outlined" color="success" @click="adjustStandstillTime(currentAdjustmentLocation.key, 'end', 720)">+12h</v-btn>
               </div>
               <div class="adjust-time">{{ getAdjustedTime(currentAdjustmentLocation.bis, standstillAdjustments[currentAdjustmentLocation.key]?.end || 0) }}</div>
             </div>

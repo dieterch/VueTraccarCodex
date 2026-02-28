@@ -29,6 +29,7 @@ const { mapProvider, mapAdapters, setMapProvider } = useMapProvider();
 const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
+const multipleSelection = ref(false);
 const liveIntervalOptions = [
     { title: '15s', value: 15000 },
     { title: '30s', value: 30000 },
@@ -72,20 +73,39 @@ function setStopDate(params) {
 
 async function update_travel(item) {
     const values = Array.isArray(item) ? item : [item];
-    const selectedItems = values
+    const normalized = values
         .map(entry => typeof entry === 'string' ? travels.value.find(t => t.title === entry) : entry)
         .filter(Boolean);
-    await setSelectedTravels(selectedItems);
+
+    if (!multipleSelection.value) {
+        const single = normalized[normalized.length - 1] || selectedTravels.value[0] || travels.value[travels.value.length - 1];
+        await setSelectedTravels(single ? [single] : []);
+        return;
+    }
+
+    await setSelectedTravels(normalized);
 }
 
 async function toggleAllTravels() {
     if (travels.value.length === 0) return;
+    if (!multipleSelection.value) {
+        const fallback = selectedTravels.value[0] || travels.value[travels.value.length - 1];
+        await setSelectedTravels([fallback]);
+        return;
+    }
     if (allTravelsSelected.value) {
         const fallback = selectedTravels.value[0] || travels.value[travels.value.length - 1];
         await setSelectedTravels([fallback]);
         return;
     }
     await setSelectedTravels([...travels.value]);
+}
+
+async function handleMultipleSelectionToggle(value) {
+    multipleSelection.value = Boolean(value);
+    if (!multipleSelection.value && selectedTravels.value.length > 1) {
+        await setSelectedTravels([selectedTravels.value[0]]);
+    }
 }
 
 async function handleLiveModeToggle(value) {
@@ -304,17 +324,27 @@ onMounted(async () => {
                         class="mobile-travel-select"
                     >
                         <template v-slot:prepend-item>
-                            <v-list-item @click="toggleAllTravels">
-                                <template v-slot:prepend>
+                            <div class="travel-menu-controls">
+                                <div class="travel-menu-all" @click="toggleAllTravels">
                                     <v-checkbox-btn
                                         :model-value="allTravelsSelected"
                                         :indeterminate="someTravelsSelected"
+                                        :disabled="!multipleSelection"
                                         color="primary"
                                         readonly
                                     ></v-checkbox-btn>
-                                </template>
-                                <v-list-item-title>Alle Reisen</v-list-item-title>
-                            </v-list-item>
+                                    <span>Alle Reisen</span>
+                                </div>
+                                <v-checkbox
+                                    class="travel-menu-multi"
+                                    density="compact"
+                                    hide-details
+                                    color="primary"
+                                    :model-value="multipleSelection"
+                                    label="Multiple selection"
+                                    @update:model-value="handleMultipleSelectionToggle"
+                                ></v-checkbox>
+                            </div>
                             <v-divider></v-divider>
                         </template>
                         <template v-slot:selection="{ item, index }">
@@ -375,17 +405,27 @@ onMounted(async () => {
                 class="mt-5 ml-0 mb-0 pb-0"
             >
                 <template v-slot:prepend-item>
-                    <v-list-item @click="toggleAllTravels">
-                        <template v-slot:prepend>
+                    <div class="travel-menu-controls">
+                        <div class="travel-menu-all" @click="toggleAllTravels">
                             <v-checkbox-btn
                                 :model-value="allTravelsSelected"
                                 :indeterminate="someTravelsSelected"
+                                :disabled="!multipleSelection"
                                 color="primary"
                                 readonly
                             ></v-checkbox-btn>
-                        </template>
-                        <v-list-item-title>Alle Reisen</v-list-item-title>
-                    </v-list-item>
+                            <span>Alle Reisen</span>
+                        </div>
+                        <v-checkbox
+                            class="travel-menu-multi"
+                            density="compact"
+                            hide-details
+                            color="primary"
+                            :model-value="multipleSelection"
+                            label="Multiple selection"
+                            @update:model-value="handleMultipleSelectionToggle"
+                        ></v-checkbox>
+                    </div>
                     <v-divider></v-divider>
                 </template>
                 <template v-slot:selection="{ item, index }">
@@ -557,6 +597,25 @@ onMounted(async () => {
 
 .mobile-travel-select {
   min-width: 220px;
+}
+
+.travel-menu-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+}
+
+.travel-menu-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.travel-menu-multi {
+  margin: 0;
 }
 
 .map-provider-menu-item {
