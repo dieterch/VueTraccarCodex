@@ -1334,7 +1334,6 @@ function decodeHtml(html) {
                     <!-- POI Delete Section -->
                     <v-btn
                       v-if="isAdmin && location.isPOI"
-                      block
                       color="error"
                       size="small"
                       @click="deleteManualPOI(location)"
