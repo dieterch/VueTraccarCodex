@@ -26,7 +26,9 @@ const {
 const { getDocument } = useDocuments()
 const { isAdmin } = useAuth()
 
+const wrapperContainer = ref<HTMLElement | null>(null)
 const mapContainer = ref<HTMLElement | null>(null)
+const adjustmentDialogCard = ref<HTMLElement | null>(null)
 const leafletReady = ref(false)
 const mddialog = ref(false)
 const mode = ref('light')
@@ -40,6 +42,15 @@ const wordpressPosts = ref<Record<string, any[]>>({})
 const currentAdjustmentLocation = ref<any>(null)
 const adjustmentDialog = ref(false)
 const polylineVisibility = ref<Record<string, boolean>>({})
+const adjustmentDialogPosition = ref({ x: 20, y: 84 })
+const isAdjustmentDialogDragging = ref(false)
+
+const dialogDragState = {
+  startX: 0,
+  startY: 0,
+  originX: 20,
+  originY: 84
+}
 
 let L: any = null
 let map: any = null
@@ -395,13 +406,114 @@ function clearAllSideTrips() {
   loadedSideTrips.value = {}
 }
 
-function openAdjustmentDialog(location: any) {
+async function openAdjustmentDialog(location: any, loadSideTripsFirst = false) {
+  if (loadSideTripsFirst) {
+    await loadStandstillSideTrips(location)
+  }
   currentAdjustmentLocation.value = location
   if (!standstillAdjustments.value[location.key]) {
     standstillAdjustments.value[location.key] = { start: 0, end: 0 }
   }
   adjustmentDialog.value = true
-  loadStandstillSideTrips(location)
+}
+
+function clampDialogPosition(x: number, y: number) {
+  if (!process.client) return { x, y }
+  const padding = 8
+  const wrapperWidth = wrapperContainer.value?.clientWidth || window.innerWidth
+  const wrapperHeight = wrapperContainer.value?.clientHeight || window.innerHeight
+  const dialogWidth = adjustmentDialogCard.value?.offsetWidth || Math.min(640, wrapperWidth - 16)
+  const dialogHeight = adjustmentDialogCard.value?.offsetHeight || 420
+
+  const minX = padding
+  const minY = padding
+  const maxX = Math.max(minX, wrapperWidth - dialogWidth - padding)
+  const maxY = Math.max(minY, wrapperHeight - dialogHeight - padding)
+  return {
+    x: Math.min(Math.max(minX, x), maxX),
+    y: Math.min(Math.max(minY, y), maxY)
+  }
+}
+
+function ensureAdjustmentDialogInViewport() {
+  const clamped = clampDialogPosition(adjustmentDialogPosition.value.x, adjustmentDialogPosition.value.y)
+  adjustmentDialogPosition.value = clamped
+}
+
+function onAdjustmentDialogDragMove(event: PointerEvent) {
+  if (!isAdjustmentDialogDragging.value) return
+  const nextX = dialogDragState.originX + (event.clientX - dialogDragState.startX)
+  const nextY = dialogDragState.originY + (event.clientY - dialogDragState.startY)
+  adjustmentDialogPosition.value = clampDialogPosition(nextX, nextY)
+}
+
+function stopAdjustmentDialogDrag() {
+  if (!isAdjustmentDialogDragging.value) return
+  isAdjustmentDialogDragging.value = false
+  window.removeEventListener('pointermove', onAdjustmentDialogDragMove)
+  window.removeEventListener('pointerup', stopAdjustmentDialogDrag)
+}
+
+function startAdjustmentDialogDrag(event: PointerEvent) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  isAdjustmentDialogDragging.value = true
+  dialogDragState.startX = event.clientX
+  dialogDragState.startY = event.clientY
+  dialogDragState.originX = adjustmentDialogPosition.value.x
+  dialogDragState.originY = adjustmentDialogPosition.value.y
+  window.addEventListener('pointermove', onAdjustmentDialogDragMove)
+  window.addEventListener('pointerup', stopAdjustmentDialogDrag)
+}
+
+function bindPopupDrag(root: HTMLElement) {
+  const handle = root.querySelector('.osm-popup-title') as HTMLElement | null
+  if (!handle) return () => {}
+
+  let isDragging = false
+  let startX = 0
+  let startY = 0
+  let originX = 0
+  let originY = 0
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!isDragging) return
+    const deltaX = event.clientX - startX
+    const deltaY = event.clientY - startY
+    const nextX = originX + deltaX
+    const nextY = originY + deltaY
+    root.style.marginLeft = `${nextX}px`
+    root.style.marginTop = `${nextY}px`
+  }
+
+  const stopDrag = () => {
+    if (!isDragging) return
+    isDragging = false
+    map?.dragging?.enable?.()
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', stopDrag)
+  }
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    isDragging = true
+    startX = event.clientX
+    startY = event.clientY
+    originX = parseFloat(root.style.marginLeft || '0') || 0
+    originY = parseFloat(root.style.marginTop || '0') || 0
+    map?.dragging?.disable?.()
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', stopDrag)
+  }
+
+  handle.addEventListener('pointerdown', onPointerDown)
+  return () => {
+    stopDrag()
+    handle.removeEventListener('pointerdown', onPointerDown)
+  }
 }
 
 const popupHtml = (location: any) => {
@@ -433,16 +545,16 @@ const popupHtml = (location: any) => {
     : `<div>von: ${location.von}</div><div>bis: ${location.bis}</div><div>Dauer: ${location.period}h</div>`
 
   const adjustButton = isAdmin.value
-    ? `<button class="osm-btn" data-action="adjust">Zeit anpassen</button>`
+    ? `<button class="osm-btn osm-btn-warning" data-action="adjust">Zeit anpassen</button>`
     : ''
 
   const deleteButton = isAdmin.value && location.isPOI
-    ? `<button class="osm-btn osm-delete" data-action="delete">POI löschen</button>`
+    ? `<button class="osm-btn osm-btn-error osm-delete" data-action="delete">POI löschen</button>`
     : ''
 
   return `
     <div class="osm-popup" data-location-key="${location.key}">
-      <h4>${stripPlusCode(String(location?.address || '').split(',')[0] || location?.title || 'Location')}</h4>
+      <h4 class="osm-popup-title">${stripPlusCode(String(location?.address || '').split(',')[0] || location?.title || 'Location')}</h4>
       <div class="osm-addr">${location.address || ''}</div>
       ${details}
       <div><a href="${GoogleMapsLink(location.lat, location.lng)}" target="_blank">Link zu Google Maps</a></div>
@@ -451,9 +563,9 @@ const popupHtml = (location: any) => {
       </div>
       <div class="osm-status">${status}</div>
       <div class="osm-actions">
-        <button class="osm-btn" data-action="notes">Notizen</button>
-        <button class="osm-btn" data-action="sidetrips">Ausflüge</button>
-        <button class="osm-btn" data-action="copy">Marker kopieren</button>
+        <button class="osm-btn osm-btn-primary" data-action="notes">Notizen</button>
+        <button class="osm-btn osm-btn-success" data-action="sidetrips">Ausflüge</button>
+        <button class="osm-btn osm-btn-neutral" data-action="copy">Marker kopieren</button>
         ${adjustButton}
         ${deleteButton}
       </div>
@@ -465,12 +577,14 @@ const popupHtml = (location: any) => {
 
 const bindPopupActions = (marker: any, location: any) => {
   const clickHandlerKey = '__osmPopupClickHandler'
+  const dragCleanupKey = '__osmPopupDragCleanup'
 
   marker.on('popupopen', (event: any) => {
     const root = event?.popup?.getElement?.() as HTMLElement | null
     if (!root) return
     loadStandstillAdjustment(location.key)
     loadWordPressPosts(location.key)
+    ;(marker as any)[dragCleanupKey] = bindPopupDrag(root)
 
     // Delegate clicks from popup root so handlers survive setPopupContent() updates.
     const onPopupClick = async (ev: Event) => {
@@ -483,9 +597,15 @@ const bindPopupActions = (marker: any, location: any) => {
       const action = actionEl.dataset.action
 
       if (action === 'notes') await openmddialog(location.key)
-      if (action === 'sidetrips') await loadStandstillSideTrips(location)
+      if (action === 'sidetrips') {
+        await loadStandstillSideTrips(location)
+        marker.closePopup()
+      }
       if (action === 'copy') await copyToClipboard(location.key)
-      if (action === 'adjust') openAdjustmentDialog(location)
+      if (action === 'adjust') {
+        await openAdjustmentDialog(location, true)
+        marker.closePopup()
+      }
       if (action === 'delete') await deleteManualPOI(location)
     }
 
@@ -496,10 +616,15 @@ const bindPopupActions = (marker: any, location: any) => {
   marker.on('popupclose', (event: any) => {
     const root = event?.popup?.getElement?.() as HTMLElement | null
     const handler = (marker as any)[clickHandlerKey]
+    const dragCleanup = (marker as any)[dragCleanupKey]
     if (root && handler) {
       root.removeEventListener('click', handler)
     }
+    if (typeof dragCleanup === 'function') {
+      dragCleanup()
+    }
     delete (marker as any)[clickHandlerKey]
+    delete (marker as any)[dragCleanupKey]
   })
 }
 
@@ -607,6 +732,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  stopAdjustmentDialogDrag()
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
   if (map) {
@@ -618,10 +744,19 @@ onBeforeUnmount(() => {
 watch([renderedPolylines, togglepath], () => drawPolylines(), { deep: true })
 watch([locations, togglemarkers], () => drawMarkers(), { deep: true })
 watch([center, zoom], () => syncViewport(), { deep: true })
+watch(adjustmentDialog, (isOpen) => {
+  if (isOpen) {
+    nextTick(() => {
+      ensureAdjustmentDialogInViewport()
+    })
+  } else {
+    stopAdjustmentDialogDrag()
+  }
+})
 </script>
 
 <template>
-  <div class="leaflet-wrapper">
+  <div ref="wrapperContainer" class="leaflet-wrapper">
     <div v-if="isLoading" class="leaflet-loading">
       <v-progress-circular indeterminate color="primary" size="64" width="6"></v-progress-circular>
       <div class="leaflet-loading-text">{{ loadingMessage }}</div>
@@ -679,9 +814,24 @@ watch([center, zoom], () => syncViewport(), { deep: true })
       </div>
     </div>
 
-    <v-dialog v-model="adjustmentDialog" max-width="640">
-      <v-card v-if="currentAdjustmentLocation">
-        <v-card-title class="text-h6">
+    <div v-if="adjustmentDialog" class="adjustment-layer">
+      <v-card
+        v-if="currentAdjustmentLocation"
+        ref="adjustmentDialogCard"
+        class="adjustment-dialog-card"
+        :style="{
+          position: 'absolute',
+          left: `${adjustmentDialogPosition.x}px`,
+          top: `${adjustmentDialogPosition.y}px`,
+          width: 'min(640px, calc(100% - 16px))',
+          maxWidth: '640px',
+          margin: 0
+        }"
+      >
+        <v-card-title
+          class="text-h6 adjustment-dialog-drag-handle"
+          @pointerdown="startAdjustmentDialogDrag"
+        >
           Ausflugszeitraum anpassen
         </v-card-title>
         <v-card-subtitle>
@@ -727,7 +877,7 @@ watch([center, zoom], () => syncViewport(), { deep: true })
           <v-btn color="secondary" variant="text" @click="adjustmentDialog = false">Schließen</v-btn>
         </v-card-actions>
       </v-card>
-    </v-dialog>
+    </div>
 
     <MDDialog
       :content="content"
@@ -836,6 +986,23 @@ watch([center, zoom], () => syncViewport(), { deep: true })
   font-size: 13px;
   color: #37474f;
 }
+
+.adjustment-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2001;
+  pointer-events: none;
+}
+
+.adjustment-dialog-card {
+  pointer-events: auto;
+  z-index: 2002;
+}
+
+.adjustment-dialog-drag-handle {
+  cursor: move;
+  user-select: none;
+}
 </style>
 
 <style>
@@ -845,6 +1012,11 @@ watch([center, zoom], () => syncViewport(), { deep: true })
 
 .osm-popup h4 {
   margin: 0 0 6px 0;
+}
+
+.osm-popup-title {
+  cursor: move;
+  user-select: none;
 }
 
 .osm-addr {
@@ -872,21 +1044,53 @@ watch([center, zoom], () => syncViewport(), { deep: true })
 }
 
 .osm-btn {
-  border: 1px solid #cfd8dc;
+  border: 1px solid transparent;
   border-radius: 4px;
-  background: #fff;
+  background: #f5f5f5;
+  color: #1f1f1f;
   padding: 6px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
 }
 
 .osm-btn:hover {
-  background: #eceff1;
+  filter: brightness(0.95);
+}
+
+.osm-btn:active {
+  transform: translateY(1px);
+}
+
+.osm-btn-primary {
+  background: #1976d2;
+  color: #fff;
+}
+
+.osm-btn-success {
+  background: #2e7d32;
+  color: #fff;
+}
+
+.osm-btn-warning {
+  background: #ed6c02;
+  color: #fff;
+}
+
+.osm-btn-neutral {
+  background: #fff;
+  color: #455a64;
+  border-color: #90a4ae;
+}
+
+.osm-btn-error {
+  background: #d32f2f;
+  color: #fff;
 }
 
 .osm-delete {
-  border-color: #ef9a9a;
-  color: #b71c1c;
+  border-color: #d32f2f;
 }
 
 .osm-divider {
