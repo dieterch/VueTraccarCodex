@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
 
     // Get events and standstill periods
     const events = await traccarService.getEvents(deviceId, from, to)
-    const standstills = await traccarService.getStandstillPeriods(deviceId)
+    const standstills = await traccarService.getStandstillPeriodsForRange(deviceId, from, to)
 
     // Analyze auto travels
     const autoTravels = await travelAnalyzer.analyzeTravels(events, standstills, deviceId)

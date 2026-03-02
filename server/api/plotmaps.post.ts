@@ -3,7 +3,6 @@ import {
   calculateBounds,
   calculateCenter,
   calculateZoom,
-  filterStandstillPeriods,
   cleanStandstillPeriods,
   translateCountry,
   calculateDistance
@@ -67,10 +66,7 @@ export default defineEventHandler(async (event) => {
     let locations: MapMarker[] = []
     if (!isManual) {
       // Get standstill periods for main device
-      let standstills = await traccarService.getStandstillPeriods(deviceId)
-
-      // Filter by time range
-      standstills = filterStandstillPeriods(standstills, from, to)
+      let standstills = await traccarService.getStandstillPeriodsForRange(deviceId, from, to)
 
       // Clean/merge nearby standstills
       standstills = cleanStandstillPeriods(standstills)

@@ -35,17 +35,7 @@ export default defineEventHandler(async (event) => {
     let filteredStandstills: any[] = []
     if (!isManual) {
       // Get standstill periods
-      const standstills = await traccarService.getStandstillPeriods(deviceId)
-
-      // Filter standstills to match the time range
-      const fromTime = new Date(from).getTime()
-      const toTime = new Date(to).getTime()
-      const filtered = standstills.filter(s => {
-        const standstillStart = new Date(s.von).getTime()
-        const standstillEnd = new Date(s.bis).getTime()
-        // Include standstill if it overlaps with the requested time range
-        return standstillStart <= toTime && standstillEnd >= fromTime
-      })
+      const filtered = await traccarService.getStandstillPeriodsForRange(deviceId, from, to)
 
       // Fetch WordPress titles for each standstill
       filteredStandstills = await Promise.all(

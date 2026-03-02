@@ -15,6 +15,43 @@ export class TraccarService {
   private client = createTraccarClient()
   private config = useRuntimeConfig()
 
+  private getDefaultDeviceId(): number {
+    return parseInt(this.config.traccarDeviceId as string)
+  }
+
+  private isDefaultDevice(deviceId: number): boolean {
+    return deviceId === this.getDefaultDeviceId()
+  }
+
+  private toRoutePositions(positions: any[]): RoutePosition[] {
+    return positions.map(p => ({
+      id: p.id,
+      deviceId: p.deviceId,
+      fixTime: p.fixTime,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      altitude: p.altitude,
+      speed: p.speed,
+      totalDistance: 0,
+      attributes: p.attributes
+    }))
+  }
+
+  private async analyzeRange(deviceId: number, from: string, to: string): Promise<{ route: RoutePosition[]; standstills: StandstillPeriod[] }> {
+    const positions = await this.client.getRoute(deviceId, from, to)
+    const routePositions = this.toRoutePositions(positions)
+    const standPeriod = parseInt(this.config.standPeriod as string) || 12
+    return analyzeRoute(routePositions, standPeriod)
+  }
+
+  private overlapsRange(period: StandstillPeriod, from: string, to: string): boolean {
+    const fromTime = new Date(from).getTime()
+    const toTime = new Date(to).getTime()
+    const standstillStart = new Date(period.von).getTime()
+    const standstillEnd = new Date(period.bis).getTime()
+    return standstillStart <= toTime && standstillEnd >= fromTime
+  }
+
   async getDevices(): Promise<TraccarDevice[]> {
     return await this.client.getDevices()
   }
@@ -29,6 +66,14 @@ export class TraccarService {
    * Fetches from cache, then incrementally updates with new data
    */
   async getRouteData(deviceId: number, from: string, to: string): Promise<RoutePosition[]> {
+    if (!this.isDefaultDevice(deviceId)) {
+      console.log(
+        `No cache bootstrap for non-default device ${deviceId}; fetching requested range only (${from} to ${to})`
+      )
+      const { route } = await this.analyzeRange(deviceId, from, to)
+      return route
+    }
+
     // Check if we have cached data
     if (!hasCachedData(deviceId)) {
       console.log('No cached data found, triggering prefetch')
@@ -143,19 +188,7 @@ export class TraccarService {
 
     // Fetch all data
     const positions = await this.client.getRoute(deviceId, startDate, now)
-
-    // Convert to RoutePosition format
-    const routePositions: RoutePosition[] = positions.map(p => ({
-      id: p.id,
-      deviceId: p.deviceId,
-      fixTime: p.fixTime,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      altitude: p.altitude,
-      speed: p.speed,
-      totalDistance: 0,
-      attributes: p.attributes
-    }))
+    const routePositions = this.toRoutePositions(positions)
 
     // Analyze route
     const standPeriod = parseInt(config.standPeriod as string) || 12
@@ -189,6 +222,13 @@ export class TraccarService {
    * Get standstill periods for a device
    */
   async getStandstillPeriods(deviceId: number): Promise<StandstillPeriod[]> {
+    if (!this.isDefaultDevice(deviceId)) {
+      console.log(
+        `Skipping automatic standstill cache bootstrap/update for non-default device ${deviceId}`
+      )
+      return []
+    }
+
     // Ensure cache is up to date
     if (!hasCachedData(deviceId)) {
       await this.prefetchRouteData(deviceId)
@@ -197,6 +237,20 @@ export class TraccarService {
     }
 
     return getStandstillPeriods(deviceId)
+  }
+
+  async getStandstillPeriodsForRange(
+    deviceId: number,
+    from: string,
+    to: string
+  ): Promise<StandstillPeriod[]> {
+    if (!this.isDefaultDevice(deviceId)) {
+      const { standstills } = await this.analyzeRange(deviceId, from, to)
+      return standstills
+    }
+
+    const standstills = await this.getStandstillPeriods(deviceId)
+    return standstills.filter(period => this.overlapsRange(period, from, to))
   }
 
   async getGeofences(): Promise<any[]> {
