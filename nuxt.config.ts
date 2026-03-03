@@ -215,6 +215,10 @@ export default defineNuxtConfig({
       ? process.env.AUTH_COOKIE_SECURE === 'true'
       : process.env.NODE_ENV === 'production',
     adminGroup: process.env.ADMIN_GROUP || 'admins',
+    mobileAuthUsername: process.env.MOBILE_AUTH_USERNAME || '',
+    mobileAuthPasswordHash: process.env.MOBILE_AUTH_PASSWORD_HASH || '',
+    mobileAuthRole: process.env.MOBILE_AUTH_ROLE || 'user',
+    mobileJwtTtlSeconds: parseInt(process.env.MOBILE_JWT_TTL_SECONDS || '600'),
     authBypass: process.env.AUTH_BYPASS === 'true',
     authBypassRole: process.env.AUTH_BYPASS_ROLE || 'admin',
 

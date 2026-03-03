@@ -56,6 +56,31 @@ export const issueJwt = async (payload: { user: string; groups: string[] }) => {
   return { token, exp, role }
 }
 
+export const issueJwtWithTtl = async (
+  payload: { user: string; groups: string[] },
+  ttlSeconds: number
+) => {
+  const config = useRuntimeConfig()
+  const secret = new TextEncoder().encode(String(config.jwtSecret))
+  const now = Math.floor(Date.now() / 1000)
+  const exp = now + Math.max(1, Math.floor(ttlSeconds))
+  const role = resolveRole(payload.groups)
+
+  const token = await new SignJWT({
+    groups: payload.groups,
+    role
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(payload.user)
+    .setIssuedAt(now)
+    .setExpirationTime(exp)
+    .setIssuer(String(config.jwtIssuer || 'vue-traccar'))
+    .setAudience(String(config.jwtAudience || 'vue-traccar-ui'))
+    .sign(secret)
+
+  return { token, exp, role }
+}
+
 export const verifyJwt = async (token: string) => {
   const config = useRuntimeConfig()
   const secret = new TextEncoder().encode(String(config.jwtSecret))

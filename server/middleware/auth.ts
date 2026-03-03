@@ -1,20 +1,23 @@
 import { createError, defineEventHandler, getHeader, setResponseStatus } from 'h3'
 import { buildAuthContext, getJwtFromCookie, isAuthBypassEnabled, verifyJwt } from '~/server/utils/auth'
+import { parseBearerToken } from '~/server/utils/mobile-auth'
 
 export default defineEventHandler(async (event) => {
-  const path = event.path || ''
+  const path = String(event.path || '')
+  const pathname = path.split('?')[0]
   if (!path.startsWith('/api/')) {
     return
   }
 
-  const isMobileApi = path.startsWith('/api/mobile/')
-  if (isMobileApi && path.startsWith('/api/mobile/auth/')) {
-    console.info('[auth] mobile auth namespace bypassed:', path)
+  const isMobileApi = pathname.startsWith('/api/mobile/')
+  const isMobileLoginPath = pathname === '/api/mobile/auth/login'
+  if (isMobileLoginPath) {
+    console.info('[auth] mobile login route bypassed')
     return
   }
 
-  if (path.startsWith('/api/auth/')) {
-    console.info('[auth] web auth namespace bypassed:', path)
+  if (pathname.startsWith('/api/auth/')) {
+    console.info('[auth] web auth namespace bypassed')
     return
   }
 
@@ -26,20 +29,30 @@ export default defineEventHandler(async (event) => {
       groups: role === 'admin' ? ['admins'] : [],
       exp: Math.floor(Date.now() / 1000) + 3600
     }
-    console.info('[auth] bypass enabled in non-production:', path)
+    console.info('[auth] bypass enabled in non-production')
     return
   }
 
-  const authHeader = String(getHeader(event, 'authorization') || '')
-  const bearerToken = isMobileApi && authHeader.toLowerCase().startsWith('bearer ')
-    ? authHeader.slice(7).trim()
-    : ''
-  const cookieToken = getJwtFromCookie(event)
-  const token = bearerToken || cookieToken
+  const bearerToken = parseBearerToken(getHeader(event, 'authorization'))
+  if (bearerToken) {
+    try {
+      const payload = await verifyJwt(bearerToken)
+      event.context.auth = buildAuthContext(payload)
+      console.info('[auth] bearer token accepted')
+      return
+    } catch {
+      console.warn('[auth] bearer token rejected')
+      setResponseStatus(event, 401)
+      return { error: 'unauthorized' }
+    }
+  }
 
+  const cookieToken = getJwtFromCookie(event)
+  const token = cookieToken
   if (!token) {
+    console.info('[auth] no bearer token, falling back to cookie/web flow')
     if (isMobileApi) {
-      console.info('[auth] mobile unauthorized (missing token):', path)
+      console.info('[auth] mobile unauthorized (missing token)')
       setResponseStatus(event, 401)
       return { error: 'unauthorized' }
     }
@@ -50,11 +63,12 @@ export default defineEventHandler(async (event) => {
     const payload = await verifyJwt(token)
     event.context.auth = buildAuthContext(payload)
     if (isMobileApi) {
-      console.info('[auth] mobile authorized via JWT:', path)
+      console.info('[auth] mobile authorized via cookie JWT')
     }
-  } catch (error) {
+  } catch {
+    console.warn('[auth] cookie JWT rejected')
     if (isMobileApi) {
-      console.info('[auth] mobile unauthorized (invalid token):', path)
+      console.info('[auth] mobile unauthorized (invalid token)')
       setResponseStatus(event, 401)
       return { error: 'unauthorized' }
     }
