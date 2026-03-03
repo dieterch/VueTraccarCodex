@@ -376,6 +376,7 @@ Notes:
 ### OpenAPI / Swagger
 - OpenAPI spec file: `public/openapi.yaml`
 - Served by Nuxt at: `/openapi.yaml`
+- Swagger UI route: `/docs` (web route, protected by existing Authelia flow)
 - Import into Swagger UI Editor: https://editor.swagger.io/
 
 ### GPS & Route Data
