@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const authHeader = String(getHeader(event, 'authorization') || '')
-  const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+  const bearerToken = isMobileApi && authHeader.toLowerCase().startsWith('bearer ')
     ? authHeader.slice(7).trim()
     : ''
   const cookieToken = getJwtFromCookie(event)
