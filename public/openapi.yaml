@@ -1,0 +1,1104 @@
+openapi: 3.0.3
+info:
+  title: VueTraccarCodex API
+  version: 1.0.0
+  description: |
+    OpenAPI reference for the Nuxt backend.
+
+    Auth behavior:
+    - `/api/mobile/auth/login` is public and returns a short-lived JWT for native clients.
+    - `/api/mobile/*` requires `Authorization: Bearer <token>` and returns JSON `401` when unauthorized.
+    - `/api/*` accepts bearer tokens. If no bearer token is provided, existing web cookie/Authelia flow remains active.
+servers:
+  - url: /
+    description: Same-origin
+  - url: https://dtraccarcodex.home.smallfamilybusiness.net
+    description: Production
+
+tags:
+  - name: Mobile
+  - name: Auth
+  - name: GPS
+  - name: Travels
+  - name: Manual Travels
+  - name: Travel Patches
+  - name: Settings
+  - name: Documents
+  - name: WordPress
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+paths:
+  /api/mobile/auth/login:
+    post:
+      tags: [Mobile]
+      summary: Mobile login
+      description: Validates configured mobile credentials and returns short-lived JWT.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileLoginResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorTooManyRequests'
+
+  /api/mobile/ping:
+    get:
+      tags: [Mobile]
+      summary: Authenticated mobile health check
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user: { type: string, nullable: true }
+                  role: { type: string, enum: [admin, user], nullable: true }
+        '401':
+          $ref: '#/components/responses/UnauthorizedJson'
+
+  /api/auth/token:
+    post:
+      tags: [Auth]
+      summary: Issue web JWT from Authelia forward-auth headers
+      security: []
+      responses:
+        '200':
+          description: Token issued and auth cookie set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Missing Authelia user headers
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Return current web auth status
+      security: []
+      responses:
+        '200':
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Clear auth cookie
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/devices:
+    get:
+      tags: [GPS]
+      summary: List Traccar devices
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+
+  /api/geofences:
+    get:
+      tags: [GPS]
+      summary: List Traccar geofences
+      responses:
+        '200':
+          description: Geofence list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  geofences:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /api/events:
+    post:
+      tags: [GPS]
+      summary: Get geofence events for range
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRangeRequest'
+      responses:
+        '200':
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/route:
+    post:
+      tags: [GPS]
+      summary: Get route points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/DeviceRangeRequest'
+                - type: object
+                  properties:
+                    direct:
+                      type: boolean
+      responses:
+        '200':
+          description: Route points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoutePoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/plotmaps:
+    post:
+      tags: [GPS]
+      summary: Build map visualization payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/DeviceRangeRequest'
+                - type: object
+                  properties:
+                    travelSource:
+                      type: string
+                      enum: [auto, manual]
+                    travelId:
+                      type: string
+      responses:
+        '200':
+          description: Plot map result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlotMapsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/travels:
+    post:
+      tags: [Travels]
+      summary: Analyze and list travels (auto + manual)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRangeRequest'
+      responses:
+        '200':
+          description: Travel list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Travel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/download.kml:
+    post:
+      tags: [Travels]
+      summary: Export travel as KML
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId, from, to]
+              properties:
+                deviceId: { type: integer }
+                from: { type: string }
+                to: { type: string }
+                name: { type: string }
+                travelSource: { type: string, enum: [auto, manual] }
+                travelId: { type: string }
+      responses:
+        '200':
+          description: KML download/content response
+          content:
+            application/vnd.google-earth.kml+xml:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/manual-travels:
+    get:
+      tags: [Manual Travels]
+      summary: List manual travels (admin)
+      responses:
+        '200':
+          description: Manual travel list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManualTravel'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Manual Travels]
+      summary: Create manual travel (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualTravelUpsert'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/manual-travels/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Manual Travels]
+      summary: Update manual travel (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualTravelUpsert'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '404':
+          description: Not found
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Manual Travels]
+      summary: Delete manual travel (admin)
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  error: { type: string, nullable: true }
+
+  /api/manual-travels/{id}/positions:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Manual Travels]
+      summary: List manual travel positions (admin)
+      responses:
+        '200':
+          description: Positions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManualTravelPosition'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Manual Travels]
+      summary: Replace manual travel positions (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positions]
+              properties:
+                positions:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ManualTravelPositionInput'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/travel-patches:
+    get:
+      tags: [Travel Patches]
+      summary: List travel patches
+      responses:
+        '200':
+          description: Travel patches
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      tags: [Travel Patches]
+      summary: Create or update travel patch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Patch persisted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/travel-patches/{addressKey}:
+    parameters:
+      - in: path
+        name: addressKey
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Travel Patches]
+      summary: Delete travel patch
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Load settings (admin)
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  settings:
+                    $ref: '#/components/schemas/Settings'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Settings]
+      summary: Save settings (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  settings:
+                    $ref: '#/components/schemas/Settings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/side-trips/config:
+    get:
+      tags: [Settings]
+      summary: Read-only side-trip config
+      responses:
+        '200':
+          description: Config
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/side-trips:
+    post:
+      tags: [GPS]
+      summary: Load side trip polylines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Side trip payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/standstill-adjustments:
+    get:
+      tags: [Travels]
+      summary: List standstill adjustments
+      responses:
+        '200':
+          description: Adjustment list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      tags: [Travels]
+      summary: Upsert standstill adjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/standstill-adjustments/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Travels]
+      summary: Delete standstill adjustment
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/manual-pois:
+    get:
+      tags: [Travels]
+      summary: List manual POIs
+      responses:
+        '200':
+          description: POI list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      tags: [Travels]
+      summary: Create manual POI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/manual-pois/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Travels]
+      summary: Delete manual POI
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/manual-route:
+    post:
+      tags: [Manual Travels]
+      summary: Build route payload from manual points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Route result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/manual-travel-workspace/open:
+    post:
+      tags: [Manual Travels]
+      summary: Open workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Workspace response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/manual-travel-workspace/delete:
+    post:
+      tags: [Manual Travels]
+      summary: Delete from workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Workspace response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/manual-travel-workspace/keep:
+    post:
+      tags: [Manual Travels]
+      summary: Keep selection in workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Workspace response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/manual-travel-workspace/reset:
+    post:
+      tags: [Manual Travels]
+      summary: Reset workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Workspace response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/manual-travel-workspace/finalize:
+    post:
+      tags: [Manual Travels]
+      summary: Finalize workspace into manual travel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Workspace response
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/document/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Documents]
+      summary: Read RST document
+      responses:
+        '200':
+          description: Document payload
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    post:
+      tags: [Documents]
+      summary: Save RST document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Save result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/prefetchroute:
+    get:
+      tags: [GPS]
+      summary: Prefetch historical route cache
+      responses:
+        '200':
+          description: Prefetch result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/delprefetch:
+    get:
+      tags: [GPS]
+      summary: Clear prefetch cache
+      responses:
+        '200':
+          description: Cache clear result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/cache-status:
+    get:
+      tags: [GPS]
+      summary: Cache status
+      responses:
+        '200':
+          description: Cache details
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/wordpress/posts/{tag}:
+    parameters:
+      - in: path
+        name: tag
+        required: true
+        schema: { type: string }
+    get:
+      tags: [WordPress]
+      summary: Get posts by tag
+      responses:
+        '200':
+          description: Posts
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/wordpress/test:
+    get:
+      tags: [WordPress]
+      summary: WordPress connectivity test
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+components:
+  responses:
+    UnauthorizedJson:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorUnauthorized'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorForbidden'
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBadRequest'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: vt_auth
+
+  schemas:
+    ErrorUnauthorized:
+      type: object
+      properties:
+        error:
+          type: string
+          example: unauthorized
+
+    ErrorForbidden:
+      type: object
+      properties:
+        statusCode: { type: integer, example: 403 }
+        message: { type: string, example: Admin access required }
+
+    ErrorBadRequest:
+      type: object
+      properties:
+        statusCode: { type: integer, example: 400 }
+        statusMessage: { type: string }
+        message: { type: string }
+
+    ErrorTooManyRequests:
+      type: object
+      properties:
+        error:
+          type: string
+          example: too_many_requests
+        retryAfterMs:
+          type: integer
+
+    MobileLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    MobileLoginResponse:
+      type: object
+      required: [success, token, exp, user, role]
+      properties:
+        success: { type: boolean, example: true }
+        token: { type: string }
+        exp: { type: integer, description: Unix epoch seconds }
+        user: { type: string }
+        role: { type: string, enum: [admin, user] }
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        user: { type: string }
+        role: { type: string, enum: [admin, user] }
+        exp: { type: integer }
+
+    AuthMeResponse:
+      type: object
+      properties:
+        authenticated: { type: boolean }
+        user: { type: string, nullable: true }
+        role: { type: string, enum: [admin, user], nullable: true }
+        exp: { type: integer, nullable: true }
+
+    DeviceRangeRequest:
+      type: object
+      required: [deviceId, from, to]
+      properties:
+        deviceId:
+          type: integer
+        from:
+          type: string
+          description: ISO date-time string
+          example: '2026-03-01T00:00:00Z'
+        to:
+          type: string
+          description: ISO date-time string
+          example: '2026-03-02T00:00:00Z'
+
+    Device:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        uniqueId: { type: string }
+        status: { type: string }
+      additionalProperties: true
+
+    Travel:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        von: { type: string }
+        bis: { type: string }
+        distance: { type: number }
+        source: { type: string, enum: [auto, manual] }
+        deviceId: { type: integer }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, nullable: true }
+      additionalProperties: true
+
+    RoutePoint:
+      type: object
+      properties:
+        id: { type: integer }
+        deviceId: { type: integer }
+        fixTime: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        speed: { type: number }
+        altitude: { type: number }
+        totalDistance: { type: number }
+      additionalProperties: true
+
+    PlotMapsResponse:
+      type: object
+      properties:
+        bounds:
+          type: object
+          properties:
+            minLat: { type: number }
+            maxLat: { type: number }
+            minLng: { type: number }
+            maxLng: { type: number }
+        center:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+        zoom: { type: number }
+        distance: { type: number }
+        polygone:
+          type: array
+          items:
+            type: object
+            properties:
+              lat: { type: number }
+              lng: { type: number }
+              timestamp: { type: string }
+        polylines:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        locations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    ManualTravel:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        source_device_id: { type: integer }
+        from_date: { type: string }
+        to_date: { type: string }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, nullable: true }
+      additionalProperties: true
+
+    ManualTravelUpsert:
+      type: object
+      required: [title, source_device_id, from_date, to_date]
+      properties:
+        title: { type: string }
+        source_device_id: { type: integer }
+        from_date: { type: string }
+        to_date: { type: string }
+        notes: { type: string, nullable: true }
+
+    ManualTravelPosition:
+      type: object
+      properties:
+        id: { type: string }
+        travel_id: { type: string }
+        fix_time: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        speed: { type: number, nullable: true }
+        altitude: { type: number, nullable: true }
+        attributes:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+
+    ManualTravelPositionInput:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        fixTime: { type: string }
+        fix_time: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        speed: { type: number, nullable: true }
+        altitude: { type: number, nullable: true }
+        attributes:
+          type: object
+          additionalProperties: true
+
+    Settings:
+      type: object
+      properties:
+        traccarUrl: { type: string }
+        traccarUser: { type: string }
+        traccarPassword: { type: string }
+        traccarDeviceId: { type: integer }
+        traccarDeviceName: { type: string }
+        googleMapsApiKey: { type: string }
+        googleMapsMapId: { type: string }
+        wordpressUrl: { type: string }
+        wordpressUser: { type: string }
+        wordpressAppPassword: { type: string }
+        wordpressCacheDuration: { type: integer }
+        vueTraccarPassword: { type: string }
+        settingsPassword: { type: string }
+        homeMode: { type: boolean }
+        homeLatitude: { type: number }
+        homeLongitude: { type: number }
+        homeGeofenceId: { type: integer }
+        homeGeofenceName: { type: string }
+        eventMinGap: { type: integer }
+        maxDays: { type: integer }
+        minDays: { type: integer }
+        standPeriod: { type: integer }
+        startDate: { type: string }
+        sideTripEnabled: { type: boolean }
+        sideTripDevices:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        sideTripBufferHours: { type: integer }
+      additionalProperties: true

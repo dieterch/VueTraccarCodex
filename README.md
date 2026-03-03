@@ -373,6 +373,11 @@ Notes:
 
 ## API Endpoints
 
+### OpenAPI / Swagger
+- OpenAPI spec file: `public/openapi.yaml`
+- Served by Nuxt at: `/openapi.yaml`
+- Import into Swagger UI Editor: https://editor.swagger.io/
+
 ### GPS & Route Data
 - `GET /api/devices` - List GPS devices
 - `POST /api/route` - Get cached route positions
