@@ -1,7 +1,7 @@
 import { defineEventHandler, setHeader } from 'h3'
 
-export default defineEventHandler(() => {
-  setHeader('content-type', 'text/html; charset=utf-8')
+export default defineEventHandler((event) => {
+  setHeader(event, 'content-type', 'text/html; charset=utf-8')
   return `<!doctype html>
 <html lang="en">
 <head>
