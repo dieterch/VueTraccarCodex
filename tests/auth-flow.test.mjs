@@ -61,8 +61,7 @@ before(async () => {
         MOBILE_AUTH_USERNAME: username,
         MOBILE_AUTH_PASSWORD_HASH: mobileHash,
         MOBILE_AUTH_ROLE: 'user',
-        MOBILE_JWT_TTL_SECONDS: '600',
-        FORWARD_AUTH_ENFORCE_TRUSTED_MARKER: 'true'
+        MOBILE_JWT_TTL_SECONDS: '600'
       },
       stdio: 'ignore',
       detached: true

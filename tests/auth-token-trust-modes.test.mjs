@@ -3,10 +3,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 
-const strictPort = 6210
-const legacyPort = 6211
-const trustedForwardHeaderName = 'x-forwarded-proxy-auth'
-const trustedForwardHeaderValue = 'authelia-forwardauth'
+const port = 6210
 
 const runningProcesses = []
 
@@ -24,7 +21,7 @@ const waitForServer = async (baseUrl) => {
   throw new Error(`Timed out waiting for server ${baseUrl}`)
 }
 
-const startServer = async (port, enforceTrustedMarker) => {
+const startServer = async () => {
   const proc = spawn(
     'npm',
     ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)],
@@ -33,10 +30,7 @@ const startServer = async (port, enforceTrustedMarker) => {
       env: {
         ...process.env,
         AUTH_BYPASS: 'false',
-        JWT_SECRET: 'local-test-jwt-secret-abcdefghijklmnopqrstuvwxyz',
-        FORWARD_AUTH_ENFORCE_TRUSTED_MARKER: enforceTrustedMarker ? 'true' : 'false',
-        FORWARD_AUTH_TRUSTED_HEADER_NAME: trustedForwardHeaderName,
-        FORWARD_AUTH_TRUSTED_HEADER_VALUE: trustedForwardHeaderValue
+        JWT_SECRET: 'local-test-jwt-secret-abcdefghijklmnopqrstuvwxyz'
       },
       stdio: 'ignore',
       detached: true
@@ -60,6 +54,8 @@ const request = async (baseUrl, path, options = {}) => {
   return { response, body }
 }
 
+const baseUrl = `http://127.0.0.1:${port}`
+
 after(async () => {
   for (const proc of runningProcesses) {
     if (!proc || proc.killed) continue
@@ -81,12 +77,11 @@ after(async () => {
   }
 })
 
-test('strict mode: valid trusted forward-auth request -> 200 token issued', async () => {
-  const baseUrl = await startServer(strictPort, true)
+test('legacy mode: valid forwarded identity headers -> 200 token issued', async () => {
+  await startServer()
   const { response, body } = await request(baseUrl, '/api/auth/token', {
     method: 'POST',
     headers: {
-      [trustedForwardHeaderName]: trustedForwardHeaderValue,
       'x-remote-user': 'alice',
       'x-remote-groups': 'admins,users'
     }
@@ -97,36 +92,7 @@ test('strict mode: valid trusted forward-auth request -> 200 token issued', asyn
   assert.equal(body.user, 'alice')
 })
 
-test('strict mode: spoofed forwarded headers from untrusted context -> 401', async () => {
-  const baseUrl = `http://127.0.0.1:${strictPort}`
-  const { response, body } = await request(baseUrl, '/api/auth/token', {
-    method: 'POST',
-    headers: {
-      'x-remote-user': 'alice',
-      'x-remote-groups': 'admins'
-    }
-  })
-
-  assert.equal(response.status, 401)
-  assert.deepEqual(body, { error: 'unauthorized' })
-})
-
-test('strict mode: malformed header values -> 401', async () => {
-  const baseUrl = `http://127.0.0.1:${strictPort}`
-  const { response, body } = await request(baseUrl, '/api/auth/token', {
-    method: 'POST',
-    headers: {
-      [trustedForwardHeaderName]: trustedForwardHeaderValue,
-      'x-remote-user': 'bad user'
-    }
-  })
-
-  assert.equal(response.status, 401)
-  assert.deepEqual(body, { error: 'unauthorized' })
-})
-
 test('legacy mode: missing remote-user header -> 401', async () => {
-  const baseUrl = await startServer(legacyPort, false)
   const { response, body } = await request(baseUrl, '/api/auth/token', {
     method: 'POST'
   })
@@ -135,17 +101,14 @@ test('legacy mode: missing remote-user header -> 401', async () => {
   assert.deepEqual(body, { error: 'unauthorized' })
 })
 
-test('legacy mode: valid forwarded identity without trusted marker -> 200', async () => {
-  const baseUrl = `http://127.0.0.1:${legacyPort}`
+test('legacy mode: malformed header values -> 401', async () => {
   const { response, body } = await request(baseUrl, '/api/auth/token', {
     method: 'POST',
     headers: {
-      'x-remote-user': 'legacy-user',
-      'x-remote-groups': 'users'
+      'x-remote-user': 'bad user'
     }
   })
 
-  assert.equal(response.status, 200)
-  assert.equal(body.success, true)
-  assert.equal(body.user, 'legacy-user')
+  assert.equal(response.status, 401)
+  assert.deepEqual(body, { error: 'unauthorized' })
 })

@@ -31,29 +31,6 @@ export const getAutheliaUser = (event: any) => {
 const USER_HEADER_RE = /^[A-Za-z0-9._@-]{1,128}$/
 const GROUP_HEADER_RE = /^[A-Za-z0-9._-]{1,64}$/
 
-export const isTrustedForwardAuthContext = (event: any) => {
-  const config = useRuntimeConfig()
-  const trustedHeaderName = String(config.forwardAuthTrustedHeaderName || 'x-forwarded-proxy-auth')
-    .trim()
-    .toLowerCase()
-  const trustedHeaderValue = String(config.forwardAuthTrustedHeaderValue || 'authelia-forwardauth')
-
-  const trustedHeader = trustedHeaderName
-    ? getHeader(event, trustedHeaderName)
-    : undefined
-
-  if (!trustedHeader || String(trustedHeader) !== trustedHeaderValue) {
-    return false
-  }
-
-  return true
-}
-
-export const isForwardAuthTrustedMarkerEnforced = () => {
-  const config = useRuntimeConfig()
-  return config.forwardAuthEnforceTrustedMarker === true
-}
-
 export const getValidatedForwardAuthIdentity = (event: any) => {
   const userHeader = String(
     getHeader(event, 'remote-user') || getHeader(event, 'x-remote-user') || ''
