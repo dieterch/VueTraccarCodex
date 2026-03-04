@@ -9,7 +9,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "mobile:hash": "node scripts/generate-mobile-auth-password-hash.mjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
