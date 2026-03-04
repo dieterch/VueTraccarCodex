@@ -1,24 +1,6 @@
-import { defineEventHandler, getHeader, getRequestIP, setCookie, setResponseStatus } from 'h3'
-import {
-  getValidatedForwardAuthIdentity,
-  isTrustedForwardAuthContext,
-  issueJwt,
-  isAuthBypassEnabled
-} from '~/server/utils/auth'
+import { createError, defineEventHandler, setCookie } from 'h3'
+import { getAutheliaUser, issueJwt, isAuthBypassEnabled } from '~/server/utils/auth'
 import { logUserEvent } from '~/server/utils/userLog'
-
-const denyUnauthorized = (event: any, reason: string) => {
-  const requestId = String(getHeader(event, 'x-request-id') || '')
-  const requestIp = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
-  console.warn('[security] auth_token_denied', {
-    reason,
-    path: String(event.path || ''),
-    requestId: requestId || null,
-    requestIp
-  })
-  setResponseStatus(event, 401)
-  return { error: 'unauthorized' }
-}
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
@@ -38,16 +20,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  if (!isTrustedForwardAuthContext(event)) {
-    return denyUnauthorized(event, 'untrusted_forward_auth_context')
+  const { user, groups } = getAutheliaUser(event)
+  if (!user) {
+    throw createError({ statusCode: 401, message: 'Missing forward-auth user' })
   }
 
-  const identity = getValidatedForwardAuthIdentity(event)
-  if (!identity) {
-    return denyUnauthorized(event, 'invalid_forward_auth_identity_headers')
-  }
-
-  const { token, exp, role } = await issueJwt(identity)
+  const { token, exp, role } = await issueJwt({ user, groups })
   const cookieName = String(config.authCookieName || 'vt_auth')
 
   setCookie(event, cookieName, token, {
@@ -60,13 +38,13 @@ export default defineEventHandler(async (event) => {
 
   await logUserEvent(event, {
     action: 'login',
-    user: identity.user,
+    user,
     role
   })
 
   return {
     success: true,
-    user: identity.user,
+    user,
     role,
     exp
   }

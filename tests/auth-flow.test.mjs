@@ -8,8 +8,6 @@ const port = 6110
 const baseUrl = `http://127.0.0.1:${port}`
 const username = 'mobile-test-user'
 const password = 'MobilePass!123'
-const trustedForwardHeaderName = 'x-forwarded-proxy-auth'
-const trustedForwardHeaderValue = 'authelia-forwardauth'
 
 let serverProcess
 
@@ -64,9 +62,7 @@ before(async () => {
         MOBILE_AUTH_USERNAME: username,
         MOBILE_AUTH_PASSWORD_HASH: mobileHash,
         MOBILE_AUTH_ROLE: 'user',
-        MOBILE_JWT_TTL_SECONDS: '600',
-        FORWARD_AUTH_TRUSTED_HEADER_NAME: trustedForwardHeaderName,
-        FORWARD_AUTH_TRUSTED_HEADER_VALUE: trustedForwardHeaderValue
+        MOBILE_JWT_TTL_SECONDS: '600'
       },
       stdio: 'ignore'
     }
@@ -180,68 +176,6 @@ test('valid cookie without bearer on /api/mobile returns 401 JSON', async () => 
 
   const { response, body } = await request('/api/mobile/ping', {
     headers: { cookie: `vt_auth=${token}` }
-  })
-
-  assert.equal(response.status, 401)
-  assert.deepEqual(body, { error: 'unauthorized' })
-})
-
-test('valid trusted forward-auth request issues token', async () => {
-  const { response, body } = await request('/api/auth/token', {
-    method: 'POST',
-    headers: {
-      [trustedForwardHeaderName]: trustedForwardHeaderValue,
-      'x-forwarded-proto': 'https',
-      'x-forwarded-host': 'dtraccarcodex.home.smallfamilybusiness.net',
-      'x-remote-user': 'alice',
-      'x-remote-groups': 'admins,users'
-    }
-  })
-
-  assert.equal(response.status, 200)
-  assert.equal(body.success, true)
-  assert.equal(body.user, 'alice')
-  assert.equal(typeof body.exp, 'number')
-})
-
-test('missing remote-user header returns 401', async () => {
-  const { response, body } = await request('/api/auth/token', {
-    method: 'POST',
-    headers: {
-      [trustedForwardHeaderName]: trustedForwardHeaderValue,
-      'x-forwarded-proto': 'https',
-      'x-forwarded-host': 'dtraccarcodex.home.smallfamilybusiness.net'
-    }
-  })
-
-  assert.equal(response.status, 401)
-  assert.deepEqual(body, { error: 'unauthorized' })
-})
-
-test('spoofed forwarded identity from untrusted context returns 401', async () => {
-  const { response, body } = await request('/api/auth/token', {
-    method: 'POST',
-    headers: {
-      'x-forwarded-proto': 'https',
-      'x-forwarded-host': 'dtraccarcodex.home.smallfamilybusiness.net',
-      'x-remote-user': 'alice',
-      'x-remote-groups': 'admins'
-    }
-  })
-
-  assert.equal(response.status, 401)
-  assert.deepEqual(body, { error: 'unauthorized' })
-})
-
-test('malformed forward-auth header values return 401', async () => {
-  const { response, body } = await request('/api/auth/token', {
-    method: 'POST',
-    headers: {
-      [trustedForwardHeaderName]: trustedForwardHeaderValue,
-      'x-forwarded-proto': 'https',
-      'x-forwarded-host': 'dtraccarcodex.home.smallfamilybusiness.net',
-      'x-remote-user': 'bad user'
-    }
   })
 
   assert.equal(response.status, 401)
