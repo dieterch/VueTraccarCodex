@@ -90,11 +90,13 @@ paths:
       summary: Issue web JWT from Authelia forward-auth headers
       security: []
       description: |
-        Exchanges forward-auth identity headers for an app JWT cookie.
+        Exchanges trusted forward-auth identity headers for an app JWT cookie.
 
         Security model:
+        - Request must originate from trusted proxy context.
+        - Request must include trusted proxy marker header configured on backend.
         - Request must include valid `remote-user` identity header.
-        - Missing or malformed identity headers are denied with `401 { "error": "unauthorized" }`.
+        - Direct/spoofed client calls are denied with `401 { "error": "unauthorized" }`.
       parameters:
         - in: header
           name: remote-user
@@ -116,6 +118,11 @@ paths:
           required: false
           schema: { type: string }
           description: Alternate forwarded groups header accepted by backend exchange.
+        - in: header
+          name: x-forwarded-proxy-auth
+          required: false
+          schema: { type: string }
+          description: Trusted proxy marker header (name/value are deployment-configured).
       responses:
         '200':
           description: Token issued and auth cookie set
@@ -134,8 +141,8 @@ paths:
                   summary: Missing remote-user
                   value:
                     error: unauthorized
-                invalidHeaderValue:
-                  summary: Malformed forwarded identity header
+                untrustedContext:
+                  summary: Untrusted proxy context / spoofed headers
                   value:
                     error: unauthorized
 
