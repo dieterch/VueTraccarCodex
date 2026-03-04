@@ -221,6 +221,8 @@ export default defineNuxtConfig({
     mobileJwtTtlSeconds: parseInt(process.env.MOBILE_JWT_TTL_SECONDS || '600'),
     authBypass: process.env.AUTH_BYPASS === 'true',
     authBypassRole: process.env.AUTH_BYPASS_ROLE || 'admin',
+    forwardAuthTrustedHeaderName: process.env.FORWARD_AUTH_TRUSTED_HEADER_NAME || 'x-forwarded-proxy-auth',
+    forwardAuthTrustedHeaderValue: process.env.FORWARD_AUTH_TRUSTED_HEADER_VALUE || '',
 
     public: {
       // Client-accessible
