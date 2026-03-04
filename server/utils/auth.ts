@@ -49,11 +49,6 @@ export const isTrustedForwardAuthContext = (event: any) => {
   return true
 }
 
-export const isForwardAuthTrustedMarkerEnforced = () => {
-  const config = useRuntimeConfig()
-  return config.forwardAuthEnforceTrustedMarker === true
-}
-
 export const getValidatedForwardAuthIdentity = (event: any) => {
   const userHeader = String(
     getHeader(event, 'remote-user') || getHeader(event, 'x-remote-user') || ''

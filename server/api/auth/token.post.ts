@@ -1,7 +1,6 @@
 import { defineEventHandler, getHeader, getRequestIP, setCookie, setResponseStatus } from 'h3'
 import {
   getValidatedForwardAuthIdentity,
-  isForwardAuthTrustedMarkerEnforced,
   isTrustedForwardAuthContext,
   issueJwt,
   isAuthBypassEnabled
@@ -23,7 +22,6 @@ const denyUnauthorized = (event: any, reason: string) => {
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const enforceTrustedMarker = isForwardAuthTrustedMarkerEnforced()
 
   if (isAuthBypassEnabled()) {
     const role = String(config.authBypassRole || 'admin')
@@ -40,7 +38,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  if (enforceTrustedMarker && !isTrustedForwardAuthContext(event)) {
+  if (!isTrustedForwardAuthContext(event)) {
     return denyUnauthorized(event, 'untrusted_forward_auth_context')
   }
 
