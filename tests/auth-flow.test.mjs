@@ -132,3 +132,52 @@ test('missing bearer keeps existing fallback behavior', async () => {
   assert.equal(response.status, 401)
   assert.equal(body.message, 'Missing auth token')
 })
+
+test('valid bearer reaches protected /api/mobile handler', async () => {
+  const login = await request('/api/mobile/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  })
+  const token = login.body.token
+  assert.equal(typeof token, 'string')
+
+  const { response, body } = await request('/api/mobile/ping', {
+    headers: { authorization: `Bearer ${token}` }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(body.success, true)
+  assert.equal(body.user, username)
+})
+
+test('missing bearer on /api/mobile returns 401 JSON', async () => {
+  const { response, body } = await request('/api/mobile/ping')
+  assert.equal(response.status, 401)
+  assert.deepEqual(body, { error: 'unauthorized' })
+})
+
+test('invalid bearer on /api/mobile returns 401 JSON', async () => {
+  const { response, body } = await request('/api/mobile/ping', {
+    headers: { authorization: 'Bearer invalid' }
+  })
+  assert.equal(response.status, 401)
+  assert.deepEqual(body, { error: 'unauthorized' })
+})
+
+test('valid cookie without bearer on /api/mobile returns 401 JSON', async () => {
+  const login = await request('/api/mobile/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  })
+  const token = login.body.token
+  assert.equal(typeof token, 'string')
+
+  const { response, body } = await request('/api/mobile/ping', {
+    headers: { cookie: `vt_auth=${token}` }
+  })
+
+  assert.equal(response.status, 401)
+  assert.deepEqual(body, { error: 'unauthorized' })
+})

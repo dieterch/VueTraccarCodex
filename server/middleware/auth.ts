@@ -21,6 +21,26 @@ export default defineEventHandler(async (event) => {
     return
   }
 
+  if (isMobileApi) {
+    const mobileBearer = parseBearerToken(getHeader(event, 'authorization'))
+    if (!mobileBearer) {
+      console.info('[auth] mobile unauthorized (missing bearer token)')
+      setResponseStatus(event, 401)
+      return { error: 'unauthorized' }
+    }
+
+    try {
+      const payload = await verifyJwt(mobileBearer)
+      event.context.auth = buildAuthContext(payload)
+      console.info('[auth] mobile bearer token accepted')
+      return
+    } catch {
+      console.warn('[auth] mobile bearer token rejected')
+      setResponseStatus(event, 401)
+      return { error: 'unauthorized' }
+    }
+  }
+
   if (isAuthBypassEnabled()) {
     const role = String(useRuntimeConfig().authBypassRole || 'admin')
     event.context.auth = {

@@ -7,7 +7,8 @@ info:
 
     Auth behavior:
     - `/api/mobile/auth/login` is public and returns a short-lived JWT for native clients.
-    - `/api/mobile/*` requires `Authorization: Bearer <token>` and returns JSON `401` when unauthorized.
+    - `/api/mobile/*` (except login) strictly requires `Authorization: Bearer <token>` and returns JSON `401` when unauthorized.
+    - Cookie-based auth is not accepted on `/api/mobile/*`.
     - `/api/*` accepts bearer tokens. If no bearer token is provided, existing web cookie/Authelia flow remains active.
 servers:
   - url: /
@@ -67,6 +68,8 @@ paths:
     get:
       tags: [Mobile]
       summary: Authenticated mobile health check
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Success
