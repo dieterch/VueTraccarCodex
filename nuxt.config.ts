@@ -218,7 +218,9 @@ export default defineNuxtConfig({
     mobileAuthUsername: process.env.MOBILE_AUTH_USERNAME || '',
     mobileAuthPasswordHash: process.env.MOBILE_AUTH_PASSWORD_HASH || '',
     mobileAuthRole: process.env.MOBILE_AUTH_ROLE || 'user',
-    mobileJwtTtlSeconds: parseInt(process.env.MOBILE_JWT_TTL_SECONDS || '600'),
+    mobileJwtTtlSeconds: parseInt(process.env.MOBILE_JWT_TTL_SECONDS || '900'),
+    mobileRefreshTokenTtlSeconds: parseInt(process.env.MOBILE_REFRESH_TOKEN_TTL_SECONDS || '2592000'),
+    mobileRefreshTokenHashSecret: process.env.MOBILE_REFRESH_TOKEN_HASH_SECRET || '',
     authBypass: process.env.AUTH_BYPASS === 'true',
     authBypassRole: process.env.AUTH_BYPASS_ROLE || 'admin',
 

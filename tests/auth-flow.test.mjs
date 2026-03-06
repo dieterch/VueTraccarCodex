@@ -4,7 +4,7 @@ import { randomBytes, scryptSync } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 
-const port = 6110
+const port = 6100 + Math.floor(Math.random() * 200)
 const baseUrl = `http://127.0.0.1:${port}`
 const username = 'mobile-test-user'
 const password = 'MobilePass!123'
@@ -24,7 +24,7 @@ const waitForServer = async () => {
   const start = Date.now()
   while (Date.now() - start < 90000) {
     try {
-      const res = await fetch(`${baseUrl}/api/mobile/auth/login`, { method: 'POST' })
+      const res = await fetch(`${baseUrl}/api/mobile/ping`)
       if (res.status > 0) {
         return
       }
@@ -55,6 +55,7 @@ before(async () => {
     ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)],
     {
       cwd: process.cwd(),
+      detached: true,
       env: {
         ...process.env,
         AUTH_BYPASS: 'false',
@@ -73,8 +74,17 @@ before(async () => {
 
 after(async () => {
   if (!serverProcess || serverProcess.killed) return
-  serverProcess.kill('SIGINT')
-  await delay(500)
+  try {
+    process.kill(-serverProcess.pid, 'SIGTERM')
+  } catch {
+    // ignore if already stopped
+  }
+  await delay(1000)
+  try {
+    process.kill(-serverProcess.pid, 'SIGKILL')
+  } catch {
+    // ignore if already stopped
+  }
 })
 
 test('mobile login succeeds with valid credentials', async () => {
@@ -86,7 +96,8 @@ test('mobile login succeeds with valid credentials', async () => {
 
   assert.equal(response.status, 200)
   assert.equal(body.success, true)
-  assert.equal(typeof body.token, 'string')
+  assert.equal(typeof body.accessToken, 'string')
+  assert.equal(typeof body.refreshToken, 'string')
   assert.equal(body.user, username)
 })
 
@@ -107,7 +118,7 @@ test('valid bearer reaches protected /api handler', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username, password })
   })
-  const token = login.body.token
+  const token = login.body.accessToken
   assert.equal(typeof token, 'string')
 
   const { response, body } = await request('/api/cache-status', {
@@ -139,7 +150,7 @@ test('valid bearer reaches protected /api/mobile handler', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username, password })
   })
-  const token = login.body.token
+  const token = login.body.accessToken
   assert.equal(typeof token, 'string')
 
   const { response, body } = await request('/api/mobile/ping', {
@@ -171,7 +182,7 @@ test('valid cookie without bearer on /api/mobile returns 401 JSON', async () => 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username, password })
   })
-  const token = login.body.token
+  const token = login.body.accessToken
   assert.equal(typeof token, 'string')
 
   const { response, body } = await request('/api/mobile/ping', {

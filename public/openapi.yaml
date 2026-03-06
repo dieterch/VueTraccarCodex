@@ -6,8 +6,8 @@ info:
     OpenAPI reference for the Nuxt backend.
 
     Auth behavior:
-    - `/api/mobile/auth/login` is public and returns a short-lived JWT for native clients.
-    - `/api/mobile/*` (except login) strictly requires `Authorization: Bearer <token>` and returns JSON `401` when unauthorized.
+    - `/api/mobile/auth/login`, `/api/mobile/auth/refresh` and `/api/mobile/auth/logout` are public mobile auth endpoints.
+    - `/api/mobile/*` (other than mobile auth endpoints) strictly requires `Authorization: Bearer <token>` and returns JSON `401` when unauthorized.
     - Cookie-based auth is not accepted on `/api/mobile/*`.
     - `/api/*` accepts bearer tokens. If no bearer token is provided, existing web cookie/Authelia flow remains active.
 servers:
@@ -36,7 +36,7 @@ paths:
     post:
       tags: [Mobile]
       summary: Mobile login
-      description: Validates configured mobile credentials and returns short-lived JWT.
+      description: Validates configured mobile credentials and returns short-lived access token + refresh token.
       security: []
       requestBody:
         required: true
@@ -63,6 +63,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorTooManyRequests'
+
+  /api/mobile/auth/refresh:
+    post:
+      tags: [Mobile]
+      summary: Rotate refresh token and issue new mobile token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileRefreshRequest'
+      responses:
+        '200':
+          description: Refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileLoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedJson'
+
+  /api/mobile/auth/logout:
+    post:
+      tags: [Mobile]
+      summary: Revoke refresh token family
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileRefreshRequest'
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, example: true }
 
   /api/mobile/ping:
     get:
@@ -908,13 +951,22 @@ components:
 
     MobileLoginResponse:
       type: object
-      required: [success, token, exp, user, role]
+      required: [success, accessToken, exp, refreshToken, refreshExp, user, role]
       properties:
         success: { type: boolean, example: true }
-        token: { type: string }
+        accessToken: { type: string }
         exp: { type: integer, description: Unix epoch seconds }
+        refreshToken: { type: string }
+        refreshExp: { type: integer, description: Unix epoch seconds }
         user: { type: string }
         role: { type: string, enum: [admin, user] }
+
+    MobileRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
 
     AuthTokenResponse:
       type: object

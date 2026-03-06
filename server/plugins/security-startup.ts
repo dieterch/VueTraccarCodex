@@ -8,6 +8,7 @@ export default defineNitroPlugin(() => {
   const config = useRuntimeConfig()
   const requiredSecrets = [
     { key: 'JWT_SECRET', value: config.jwtSecret },
+    { key: 'MOBILE_REFRESH_TOKEN_HASH_SECRET', value: config.mobileRefreshTokenHashSecret },
     { key: 'SETTINGS_PASSWORD', value: config.settingsPassword },
     { key: 'TRACCAR_PASSWORD', value: config.traccarPassword }
   ]
@@ -31,6 +32,13 @@ export default defineNitroPlugin(() => {
   if (isWeakJwtSecret(jwtSecret)) {
     throw new Error(
       'Invalid JWT_SECRET for production. Configure a strong secret (min 32 chars, non-default).'
+    )
+  }
+
+  const refreshSecret = String(config.mobileRefreshTokenHashSecret || '')
+  if (isWeakJwtSecret(refreshSecret)) {
+    throw new Error(
+      'Invalid MOBILE_REFRESH_TOKEN_HASH_SECRET for production. Configure a strong secret (min 32 chars, non-default).'
     )
   }
 })

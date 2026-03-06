@@ -10,9 +10,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const isMobileApi = pathname.startsWith('/api/mobile/')
-  const isMobileLoginPath = pathname === '/api/mobile/auth/login'
-  if (isMobileLoginPath) {
-    console.info('[auth] mobile login route bypassed')
+  const isMobileAuthPublicPath =
+    pathname === '/api/mobile/auth/login' ||
+    pathname === '/api/mobile/auth/refresh' ||
+    pathname === '/api/mobile/auth/logout'
+  if (isMobileAuthPublicPath) {
+    console.info('[auth] mobile auth public route bypassed')
     return
   }
 

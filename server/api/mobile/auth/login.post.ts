@@ -4,6 +4,8 @@ import {
   clearLoginRateLimit,
   consumeLoginRateLimit,
   normalizeMobileTtlSeconds,
+  normalizeRefreshTtlSeconds,
+  issueRefreshToken,
   registerFailedLogin,
   secureStringEqual,
   verifyScryptPassword
@@ -50,6 +52,8 @@ export default defineEventHandler(async (event) => {
   const adminGroup = String(config.adminGroup || 'admins')
   const groups = role === 'admin' ? [adminGroup] : []
   const ttlSeconds = normalizeMobileTtlSeconds(config.mobileJwtTtlSeconds)
+  const refreshTtlSeconds = normalizeRefreshTtlSeconds(config.mobileRefreshTokenTtlSeconds)
+  const refreshHashSecret = String(config.mobileRefreshTokenHashSecret || config.jwtSecret || '')
   const { token, exp, role: issuedRole } = await issueJwtWithTtl(
     {
       user: configuredUsername,
@@ -57,12 +61,25 @@ export default defineEventHandler(async (event) => {
     },
     ttlSeconds
   )
+  const refresh = issueRefreshToken(
+    {
+      user: configuredUsername,
+      role,
+      groups
+    },
+    {
+      ttlSeconds: refreshTtlSeconds,
+      hashSecret: refreshHashSecret
+    }
+  )
 
   console.info('[auth] mobile login success')
   return {
     success: true,
-    token,
+    accessToken: token,
     exp,
+    refreshToken: refresh.refreshToken,
+    refreshExp: refresh.exp,
     user: configuredUsername,
     role: issuedRole
   }
