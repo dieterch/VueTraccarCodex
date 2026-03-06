@@ -15,26 +15,17 @@ const devices = ref([])
 
 // Form data
 const settings = ref({
-  // Traccar API
-  traccarUrl: '',
-  traccarUser: '',
-  traccarPassword: '',
+  // Traccar
   traccarDeviceId: null,
   traccarDeviceName: '',
 
   // Google Maps
-  googleMapsApiKey: '',
   googleMapsMapId: '',
 
   // WordPress
-  wordpressUrl: '',
-  wordpressUser: '',
-  wordpressAppPassword: '',
   wordpressCacheDuration: 3600,
 
   // Application
-  vueTraccarPassword: '',
-  settingsPassword: '',
   homeMode: false,
   homeLatitude: '',
   homeLongitude: '',
@@ -92,7 +83,7 @@ async function loadSettings() {
 
   try {
     // Load current settings
-    const settingsResponse = await $fetch('/api/settings')
+    const settingsResponse = await $fetch('/api/settings/public')
     if (settingsResponse.success) {
       settings.value = { ...settingsResponse.settings }
     }
@@ -127,12 +118,13 @@ async function saveSettings() {
 
   try {
     const payload = { ...settings.value }
+    delete payload.googleMapsApiKey
     for (const [key, value] of Object.entries(payload)) {
       if (typeof value === 'string' && value.trim() === '') {
         delete payload[key]
       }
     }
-    const response = await $fetch('/api/settings', {
+    const response = await $fetch('/api/settings/public', {
       method: 'POST',
       body: payload
     })
@@ -408,46 +400,13 @@ watch(() => configdialog.value, async (isOpen) => {
 
             <!-- Settings Sections -->
             <v-expansion-panels v-model="expandedPanels" multiple>
-              <!-- 1. Traccar API Settings -->
+              <!-- 1. Traccar Settings -->
               <v-expansion-panel value="0">
                 <v-expansion-panel-title>
                   <v-icon icon="mdi-api" class="mr-2"></v-icon>
-                  Traccar API Configuration
+                  Traccar Device Configuration
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
-                  <v-text-field
-                    v-model="settings.traccarUrl"
-                    label="Traccar URL"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-web"
-                    hint="Base URL of your Traccar server"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
-                    v-model="settings.traccarUser"
-                    label="Traccar User"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-account"
-                    hint="Username or email for Traccar login"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
-                    v-model="settings.traccarPassword"
-                    label="Traccar Password"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-lock"
-                    hint="Password for Traccar login"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
                   <v-select
                     v-model="settings.traccarDeviceId"
                     :items="devices"
@@ -482,17 +441,6 @@ watch(() => configdialog.value, async (isOpen) => {
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <v-text-field
-                    v-model="settings.googleMapsApiKey"
-                    label="Google Maps API Key"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-key"
-                    hint="API key for Google Maps"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
                     v-model="settings.googleMapsMapId"
                     label="Google Maps Map ID"
                     variant="outlined"
@@ -511,39 +459,6 @@ watch(() => configdialog.value, async (isOpen) => {
                   WordPress Integration
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
-                  <v-text-field
-                    v-model="settings.wordpressUrl"
-                    label="WordPress URL"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-web"
-                    hint="Base URL of your WordPress site"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
-                    v-model="settings.wordpressUser"
-                    label="WordPress User"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-account"
-                    hint="WordPress username"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
-                  <v-text-field
-                    v-model="settings.wordpressAppPassword"
-                    label="WordPress Application Password"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-lock"
-                    hint="App password for WordPress"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
                   <v-text-field
                     v-model.number="settings.wordpressCacheDuration"
                     label="Cache Duration (seconds)"
@@ -564,17 +479,6 @@ watch(() => configdialog.value, async (isOpen) => {
                   Application Settings
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
-                  <v-text-field
-                    v-model="settings.vueTraccarPassword"
-                    label="App Access Password"
-                    variant="outlined"
-                    density="comfortable"
-                    prepend-inner-icon="mdi-lock"
-                    hint="Password for app access"
-                    persistent-hint
-                    class="mb-3"
-                  ></v-text-field>
-
                   <v-switch
                     v-model="settings.homeMode"
                     label="Home Mode"

@@ -471,10 +471,10 @@ paths:
                 type: object
                 additionalProperties: true
 
-  /api/settings:
+  /api/settings/public:
     get:
       tags: [Settings]
-      summary: Load settings (admin)
+      summary: Load public settings (admin)
       responses:
         '200':
           description: Settings
@@ -485,18 +485,18 @@ paths:
                 properties:
                   success: { type: boolean }
                   settings:
-                    $ref: '#/components/schemas/Settings'
+                    $ref: '#/components/schemas/PublicSettings'
         '403':
           $ref: '#/components/responses/Forbidden'
     post:
       tags: [Settings]
-      summary: Save settings (admin)
+      summary: Save public settings (admin)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Settings'
+              $ref: '#/components/schemas/PublicSettings'
       responses:
         '200':
           description: Saved
@@ -508,7 +508,7 @@ paths:
                   success: { type: boolean }
                   message: { type: string }
                   settings:
-                    $ref: '#/components/schemas/Settings'
+                    $ref: '#/components/schemas/PublicSettings'
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':
@@ -1071,25 +1071,17 @@ components:
           type: object
           additionalProperties: true
 
-    Settings:
+    PublicSettings:
       type: object
       properties:
-        traccarUrl: { type: string }
-        traccarUser: { type: string }
-        traccarPassword: { type: string }
         traccarDeviceId: { type: integer }
         traccarDeviceName: { type: string }
         googleMapsApiKey: { type: string }
         googleMapsMapId: { type: string }
-        wordpressUrl: { type: string }
-        wordpressUser: { type: string }
-        wordpressAppPassword: { type: string }
         wordpressCacheDuration: { type: integer }
-        vueTraccarPassword: { type: string }
-        settingsPassword: { type: string }
         homeMode: { type: boolean }
-        homeLatitude: { type: number }
-        homeLongitude: { type: number }
+        homeLatitude: { type: string }
+        homeLongitude: { type: string }
         homeGeofenceId: { type: integer }
         homeGeofenceName: { type: string }
         eventMinGap: { type: integer }

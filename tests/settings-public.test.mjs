@@ -192,32 +192,3 @@ test('POST /api/settings/public rejects secret/internal fields', async () => {
   assert.equal(response.status, 400)
   assert.equal(typeof body, 'object')
 })
-
-test('legacy /api/settings remains safe and ignores secret fields', async () => {
-  const baseUrl = `http://127.0.0.1:${adminPort}`
-  const token = await loginAndGetToken(baseUrl)
-  const post = await request(baseUrl, '/api/settings', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      homeMode: true,
-      traccarPassword: 'should-be-ignored'
-    })
-  })
-
-  assert.equal(post.response.status, 200)
-  assert.equal(post.body.success, true)
-  assert.equal(Object.prototype.hasOwnProperty.call(post.body.settings, 'traccarPassword'), false)
-  assert.equal(post.body.settings.homeMode, true)
-  assert.equal(post.body.deprecated, true)
-
-  const get = await request(baseUrl, '/api/settings', {
-    headers: { authorization: `Bearer ${token}` }
-  })
-  assert.equal(get.response.status, 200)
-  assert.equal(Object.prototype.hasOwnProperty.call(get.body.settings, 'traccarPassword'), false)
-  assert.equal(get.body.deprecated, true)
-})
