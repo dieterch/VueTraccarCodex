@@ -106,6 +106,5 @@
 
   - “cookie/authelia redirect” behavior is described, but app code itself never issues redirects; it throws/returns 401. Redirects are infra-
     dependent and not modeled per operation.
-  - Auth-bypass mode (AUTH_BYPASS non-production) is not represented in contract.
   - OpenAPI top-level security is broad and creates ambiguity for routes that are effectively public (/api/auth/me, /api/auth/logout, /api/auth/
     token with header-based auth).

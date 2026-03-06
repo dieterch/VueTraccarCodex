@@ -1531,8 +1531,6 @@ JWT_AUDIENCE=vue-traccar-ui
 AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
-AUTH_BYPASS=false
-AUTH_BYPASS_ROLE=admin
 NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
 ```
 

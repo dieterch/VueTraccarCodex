@@ -1,88 +1,86 @@
-# dTraccarCodex – Feature Specification
+# dTraccarCodex – Current Backend/Frontend Spec
 
-## How to Use This Document with Codex
-This document is structured into **3 incremental tasks**.
+## Scope
+Nuxt 3 + Nitro application with authenticated `/api/*` backend, mobile bearer auth, and admin-managed public settings.
 
-👉 IMPORTANT:
-- Execute **one task at a time**
-- After finishing each task, Codex should:
-  - stop
-  - ask for confirmation before continuing
+## Authentication Model
 
----
+### Web flow
+- Web authentication is handled via Authelia forward-auth headers through `/api/auth/token`.
+- `/api/auth/token` issues the app JWT cookie after validating forwarded identity headers.
+- Web API calls can use cookie auth as currently implemented by middleware.
 
-# Task 1 – Live Mode (Long-Running Tracking)
+### Mobile flow
+- `POST /api/mobile/auth/login` is public and returns short-lived JWT.
+- All other `/api/mobile/*` routes are bearer-only.
+- Missing/invalid bearer on `/api/mobile/*` returns JSON:
+  - `401 { "error": "unauthorized" }`
 
-## Goal
-Enable a “Live Mode” that allows users to follow a vehicle over long trips (weeks to months), using efficient frontend caching and incremental updates.
+### General API behavior
+- `/api/*` accepts valid bearer tokens.
+- If bearer is missing on non-mobile routes, existing web cookie/auth behavior applies.
 
-## Instructions for Codex
-1. Implement Live Mode toggle in AppBar
-2. Implement IndexedDB cache
-3. Implement incremental fetching (`fixTime > lastFetchTime`)
-4. Implement polyline append (no full redraw)
-5. Add polling (configurable interval)
+## Settings Model
 
-## Important Constraints
-- Must support months of data
-- No full reloads
-- Cache must be bounded
+### Public editable settings
+- Endpoints:
+  - `GET /api/settings/public`
+  - `POST /api/settings/public`
+- Admin-only access.
+- Strict whitelist input validation on POST.
+- Only safe/public fields are exposed and writable.
 
-## Acceptance Criteria
-- Live tracking works incrementally
-- Cache is used and persists
-- Performance remains stable
+### Removed legacy endpoint
+- Legacy `/api/settings` endpoints are removed.
 
-➡️ After completion: STOP and ask user before continuing to Task 2
+### Secret/internal settings
+- Never exposed through frontend settings endpoints.
+- Managed only via environment/private runtime config.
 
----
+## Public Settings Contract
+Editable/returned fields on `/api/settings/public`:
+- `traccarDeviceId`
+- `traccarDeviceName`
+- `googleMapsApiKey`
+- `googleMapsMapId`
+- `wordpressCacheDuration`
+- `homeMode`
+- `homeLatitude`
+- `homeLongitude`
+- `homeGeofenceId`
+- `homeGeofenceName`
+- `eventMinGap`
+- `maxDays`
+- `minDays`
+- `standPeriod`
+- `startDate`
+- `sideTripEnabled`
+- `sideTripDevices`
+- `sideTripBufferHours`
 
-# Task 2 – Selectable Map Provider
+## Production Secret Requirements
+The server fails startup in production if required secrets are missing/weak.
 
-## Goal
-Allow switching between Google Maps and OpenStreetMap.
+Required:
+- `JWT_SECRET`
+- `TRACCAR_PASSWORD`
+- `SETTINGS_PASSWORD`
 
-## Instructions for Codex
-1. Introduce MapAdapter abstraction
-2. Implement:
-   - GoogleMapsAdapter
-   - LeafletAdapter (OSM)
-3. Add AppBar selector
-4. Persist selection in localStorage
-5. Ensure Live Mode uses adapter (no provider-specific logic)
+Conditional:
+- If `WORDPRESS_URL` is set, then also required:
+  - `WORDPRESS_USER`
+  - `WORDPRESS_APP_PASSWORD`
 
-## Acceptance Criteria
-- Map provider can be switched at runtime
-- Live Mode works identically
-- No duplicated logic
+## OpenAPI
+- Source: `public/openapi.yaml`
+- Settings path documented as `/api/settings/public`.
+- No `/api/settings` path in contract.
 
-➡️ After completion: STOP and ask user before continuing to Task 3
+## Security Constraints
+- No secrets in frontend settings UI.
+- No secret serialization in `/api/settings/public` responses.
+- No secret acceptance in `/api/settings/public` requests.
 
----
-
-# Task 3 – Travel Selection Improvement
-
-## Goal
-Improve dropdown UX with single and multiple selection modes.
-
-## Instructions for Codex
-1. Add “Multiple selection” checkbox
-2. Default = single selection
-3. Implement logic:
-   - Single → only one selected
-   - Multiple → toggle behavior
-   - “Alle Reisen” is exclusive
-4. Fix layout alignment:
-   - “Alle Reisen” left aligned
-   - “Multiple selection” on same row (right)
-
-## Acceptance Criteria
-- Single mode enforces one selection
-- Multi mode works correctly
-- UI is clean and aligned
-
-➡️ After completion: STOP and confirm implementation
-
----
-
-# End of Document
+## Validation Baseline
+- Build: `npm run build`
+- Settings security tests: `node --test tests/settings-public.test.mjs`

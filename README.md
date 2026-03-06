@@ -155,17 +155,8 @@ ADMIN_GROUP=admins
 NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
 ```
 
-### Local development without Authelia/Traefik/Docker
-```bash
-# Bypass auth in dev only (ignored in production)
-AUTH_BYPASS=true
-AUTH_BYPASS_ROLE=admin
-AUTH_COOKIE_SECURE=false
-NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=http://localhost:9091/logout
-```
-
 Notes:
-- Settings UI and `/api/settings*` are admin-only.
+- Settings UI and `/api/settings/public` are admin-only.
 - Secrets are server-side only and are not returned by `/api/settings/public`.
 - If Authelia headers are missing, `/api/auth/token` returns 401.
 
@@ -411,8 +402,8 @@ Notes:
 - `DELETE /api/travel-patches/[addressKey]` - Delete a travel patch
 
 ### Settings
-- `GET /api/settings` - Get all current settings
-- `POST /api/settings` - Save settings to YAML file
+- `GET /api/settings/public` - Get frontend-safe editable settings
+- `POST /api/settings/public` - Save frontend-safe editable settings
 - `GET /api/side-trips/config` - Read-only side trip config for users (safe subset of settings)
 ### Auth
 - `POST /api/auth/token` - Issue JWT from Authelia headers
@@ -655,7 +646,7 @@ sudo certbot renew --dry-run
 ### Environment Setup
 
 **Production Checklist:**
-- [ ] Set `JWT_SECRET` and disable `AUTH_BYPASS`
+- [ ] Set `JWT_SECRET`
 - [ ] Configure HTTPS with valid SSL certificate
 - [ ] Set `AUTH_COOKIE_SECURE=true` for HTTPS
 - [ ] Restrict Google Maps API key by HTTP referrer
@@ -765,9 +756,6 @@ JWT_AUDIENCE=vue-traccar-ui
 AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
-AUTH_BYPASS=false
-AUTH_BYPASS_ROLE=admin
-
 # Server
 PORT=5999
 HOST=0.0.0.0
