@@ -8,7 +8,6 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    settings: await getPublicSettings(),
-    deprecated: true
+    settings: await getPublicSettings()
   }
 })

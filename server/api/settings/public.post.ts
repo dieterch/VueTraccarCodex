@@ -1,5 +1,5 @@
 import {
-  normalizeLegacyPublicSettingsPayload,
+  normalizeStrictPublicSettingsPayload,
   savePublicSettings
 } from '~/server/utils/public-settings'
 
@@ -10,13 +10,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const payload = normalizeLegacyPublicSettingsPayload(body)
+  const payload = normalizeStrictPublicSettingsPayload(body)
   const settings = await savePublicSettings(payload, { preserveUnknownSettings: true })
 
   return {
     success: true,
     message: 'Settings saved successfully',
-    settings,
-    deprecated: true
+    settings
   }
 })

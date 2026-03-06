@@ -145,7 +145,7 @@ This app expects to run behind Authelia forward-auth (e.g., via Traefik). It der
 ### JWT and role settings
 ```bash
 # JWT configuration (Required)
-JWT_SECRET=change-me
+JWT_SECRET=<strong-random-secret-min-32-chars>
 JWT_TTL_SECONDS=3600
 JWT_ISSUER=vue-traccar
 JWT_AUDIENCE=vue-traccar-ui
@@ -166,7 +166,7 @@ NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=http://localhost:9091/logout
 
 Notes:
 - Settings UI and `/api/settings*` are admin-only.
-- Secrets are visible in the Settings UI; use HTTPS in production.
+- Secrets are server-side only and are not returned by `/api/settings/public`.
 - If Authelia headers are missing, `/api/auth/token` returns 401.
 
 ## Setup
@@ -233,7 +233,7 @@ Notes:
    START_DATE=2020-01-01T00:00:00Z
 
    # Auth (Required in production)
-   JWT_SECRET=change-me
+   JWT_SECRET=<strong-random-secret-min-32-chars>
    JWT_TTL_SECONDS=3600
    JWT_ISSUER=vue-traccar
    JWT_AUDIENCE=vue-traccar-ui
@@ -758,7 +758,7 @@ STAND_PERIOD=12
 START_DATE=2020-01-01T00:00:00Z
 
 # Auth (Required in production)
-JWT_SECRET=change-me
+JWT_SECRET=<strong-random-secret-min-32-chars>
 JWT_TTL_SECONDS=3600
 JWT_ISSUER=vue-traccar
 JWT_AUDIENCE=vue-traccar-ui
@@ -772,6 +772,20 @@ AUTH_BYPASS_ROLE=admin
 PORT=5999
 HOST=0.0.0.0
 ```
+
+### Required Secret ENV Variables (Production)
+
+| Name | Purpose | Required |
+|------|---------|----------|
+| `JWT_SECRET` | Signs and verifies application JWTs | Yes |
+| `TRACCAR_PASSWORD` | Password used for Traccar API authentication | Yes |
+| `SETTINGS_PASSWORD` | Legacy app secret (kept server-side only) | Yes |
+| `WORDPRESS_USER` | WordPress API user (if integration enabled) | Conditional |
+| `WORDPRESS_APP_PASSWORD` | WordPress API app password (if integration enabled) | Conditional |
+
+Notes:
+- If `WORDPRESS_URL` is set in production, `WORDPRESS_USER` and `WORDPRESS_APP_PASSWORD` must also be set.
+- Secrets must be configured via environment only (`.env` / deployment env), never via frontend settings endpoints.
 
 ### Database Structure
 
