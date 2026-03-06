@@ -11,7 +11,13 @@ Nuxt 3 + Nitro application with authenticated `/api/*` backend, mobile bearer au
 - Web API calls can use cookie auth as currently implemented by middleware.
 
 ### Mobile flow
-- `POST /api/mobile/auth/login` is public and returns short-lived JWT.
+- `POST /api/mobile/auth/login` is public and returns:
+  - short-lived access JWT (`accessToken`, default 15m)
+  - opaque refresh token (`refreshToken`, default 30d)
+- `POST /api/mobile/auth/refresh` is public, rotates refresh token, and returns a new token pair.
+- `POST /api/mobile/auth/logout` is public and revokes the refresh-token family.
+- Refresh tokens are random opaque values; only HMAC hashes are stored server-side.
+- Refresh-token reuse detection revokes the full token family and returns `401`.
 - All other `/api/mobile/*` routes are bearer-only.
 - Missing/invalid bearer on `/api/mobile/*` returns JSON:
   - `401 { "error": "unauthorized" }`
@@ -63,6 +69,7 @@ The server fails startup in production if required secrets are missing/weak.
 
 Required:
 - `JWT_SECRET`
+- `MOBILE_REFRESH_TOKEN_HASH_SECRET`
 - `TRACCAR_PASSWORD`
 - `SETTINGS_PASSWORD`
 

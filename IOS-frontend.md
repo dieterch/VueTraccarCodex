@@ -225,13 +225,18 @@ Main screens:
 
 ## 9. Authentication
 
-Default:
-- Reuse existing cookie/session model.
-- Use `HTTPCookieStorage.shared`.
-- If app needs login bootstrap, call backend auth endpoint first (same as web flow).
+For native iOS, use mobile bearer auth with refresh tokens:
+- `POST /api/mobile/auth/login` returns `accessToken` (15m) + `refreshToken` (30d).
+- `POST /api/mobile/auth/refresh` rotates refresh token and returns new pair.
+- `POST /api/mobile/auth/logout` revokes session family.
+- Store refresh token in iOS Keychain only.
+- On API `401`, run exactly one refresh attempt, then retry the original request once.
+- Use single-flight refresh to avoid parallel refresh storms.
+- If refresh fails, clear session + keychain and return user to login.
 
-If cookie auth is blocked by infrastructure later:
-- Add token mode as phase 2 fallback.
+Reference implementation in this repo:
+- `ios/MobileAuthClient/*`
+- `ios/MobileAuthClientTests/*`
 
 ## 10. Testing Checklist
 
@@ -272,4 +277,3 @@ Phase 3:
 - Keep backend endpoints stable; iOS uses same API paths as web.
 - Do not reintroduce global prefetch for all devices in manual flow.
 - Ensure distance value used in iOS comes from actual plotted map response data.
-

@@ -153,12 +153,21 @@ AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
 NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
+
+# Mobile token flow (recommended for native clients)
+MOBILE_JWT_TTL_SECONDS=900
+MOBILE_REFRESH_TOKEN_TTL_SECONDS=2592000
+MOBILE_REFRESH_TOKEN_HASH_SECRET=<strong-random-secret-min-32-chars>
 ```
 
 Notes:
 - Settings UI and `/api/settings/public` are admin-only.
 - Secrets are server-side only and are not returned by `/api/settings/public`.
 - If Authelia headers are missing, `/api/auth/token` returns 401.
+- Mobile auth endpoints:
+  - `POST /api/mobile/auth/login`
+  - `POST /api/mobile/auth/refresh`
+  - `POST /api/mobile/auth/logout`
 
 ## Setup
 
@@ -756,6 +765,9 @@ JWT_AUDIENCE=vue-traccar-ui
 AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
+MOBILE_JWT_TTL_SECONDS=900
+MOBILE_REFRESH_TOKEN_TTL_SECONDS=2592000
+MOBILE_REFRESH_TOKEN_HASH_SECRET=<strong-random-secret-min-32-chars>
 # Server
 PORT=5999
 HOST=0.0.0.0
@@ -766,6 +778,7 @@ HOST=0.0.0.0
 | Name | Purpose | Required |
 |------|---------|----------|
 | `JWT_SECRET` | Signs and verifies application JWTs | Yes |
+| `MOBILE_REFRESH_TOKEN_HASH_SECRET` | HMAC secret used to hash opaque mobile refresh tokens | Yes |
 | `TRACCAR_PASSWORD` | Password used for Traccar API authentication | Yes |
 | `SETTINGS_PASSWORD` | Legacy app secret (kept server-side only) | Yes |
 | `WORDPRESS_USER` | WordPress API user (if integration enabled) | Conditional |
