@@ -1128,7 +1128,6 @@ components:
       properties:
         traccarDeviceId: { type: integer }
         traccarDeviceName: { type: string }
-        googleMapsApiKey: { type: string }
         googleMapsMapId: { type: string }
         wordpressCacheDuration: { type: integer }
         homeMode: { type: boolean }

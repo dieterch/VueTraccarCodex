@@ -159,6 +159,7 @@ test('admin GET /api/settings/public returns safe fields only', async () => {
   assert.equal(body.settings.sideTripEnabled !== undefined, true)
 
   const forbidden = [
+    'googleMapsApiKey',
     'traccarUser',
     'traccarPassword',
     'wordpressUser',

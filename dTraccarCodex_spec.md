@@ -47,7 +47,6 @@ Nuxt 3 + Nitro application with authenticated `/api/*` backend, mobile bearer au
 Editable/returned fields on `/api/settings/public`:
 - `traccarDeviceId`
 - `traccarDeviceName`
-- `googleMapsApiKey`
 - `googleMapsMapId`
 - `wordpressCacheDuration`
 - `homeMode`

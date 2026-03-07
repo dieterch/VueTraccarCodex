@@ -14,7 +14,6 @@ export type SideTripDeviceSetting = {
 export type PublicSettings = {
   traccarDeviceId: number | null
   traccarDeviceName: string
-  googleMapsApiKey: string
   googleMapsMapId: string
   wordpressCacheDuration: number
   homeMode: boolean
@@ -35,7 +34,6 @@ export type PublicSettings = {
 const PUBLIC_SETTINGS_KEYS = [
   'traccarDeviceId',
   'traccarDeviceName',
-  'googleMapsApiKey',
   'googleMapsMapId',
   'wordpressCacheDuration',
   'homeMode',
@@ -147,7 +145,6 @@ const normalizePartialPublicSettings = (
         result.traccarDeviceId = toOptionalInt(rawValue, key)
         break
       case 'traccarDeviceName':
-      case 'googleMapsApiKey':
       case 'googleMapsMapId':
       case 'homeLatitude':
       case 'homeLongitude':
@@ -190,7 +187,6 @@ export const normalizeLegacyPublicSettingsPayload = (payload: unknown) => {
 const buildPublicSettingsFromSource = (source: Record<string, unknown>, config: ReturnType<typeof useRuntimeConfig>): PublicSettings => ({
   traccarDeviceId: toOptionalInt(source.traccarDeviceId ?? config.traccarDeviceId, 'traccarDeviceId'),
   traccarDeviceName: String(source.traccarDeviceName ?? config.traccarDeviceName ?? ''),
-  googleMapsApiKey: String(source.googleMapsApiKey ?? config.public.googleMapsApiKey ?? ''),
   googleMapsMapId: String(source.googleMapsMapId ?? config.public.googleMapsMapId ?? ''),
   wordpressCacheDuration: toInt(source.wordpressCacheDuration ?? config.wordpressCacheDuration ?? 3600, 'wordpressCacheDuration'),
   homeMode: Boolean(source.homeMode ?? config.homeMode ?? false),
