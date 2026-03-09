@@ -25,7 +25,7 @@ const {
 const config = useRuntimeConfig();
 const { isAdmin, authState } = useAuth();
 const { isOffline, usingCachedTravel, cachedTravelUpdatedAt } = useTravelCache();
-const { mapProvider, mapAdapters, setMapProvider } = useMapProvider();
+const { mapProvider, setMapProvider } = useMapProvider();
 const { smAndDown } = useDisplay();
 
 const prefetching = ref(false);
@@ -45,9 +45,6 @@ const cachedTravelUpdatedLabel = computed(() => {
 const allTravelsSelected = computed(() => travels.value.length > 0 && selectedTravels.value.length === travels.value.length);
 const someTravelsSelected = computed(() => selectedTravels.value.length > 0 && !allTravelsSelected.value);
 const livePollingSecondsLabel = computed(() => `${Math.round(livePollingIntervalMs.value / 1000)}s`);
-const mapProviderOptions = computed(() =>
-    mapAdapters.map(adapter => ({ title: adapter.label, value: adapter.id }))
-);
 
 function travelKey(item) {
     const source = item?.source || 'auto';
@@ -118,35 +115,76 @@ function handleLiveIntervalChange(value) {
     setLivePollingInterval(next);
 }
 
-function handleMapProviderChange(value) {
-    if (value === 'google' || value === 'osm') {
-        setMapProvider(value);
-    }
-}
+const menuGroups = computed(() => {
+    const groups = [
+        {
+            key: 'overview',
+            label: 'Uebersicht',
+            items: [
+                {
+                    key: 'Refresh from server',
+                    label: 'Daten aktualisieren',
+                    disabled: isOffline.value
+                }
+            ]
+        },
+        {
+            key: 'map',
+            label: 'Karte',
+            items: [
+                {
+                    key: 'Map Provider Google',
+                    label: 'Google Maps',
+                    active: mapProvider.value === 'google'
+                },
+                {
+                    key: 'Map Provider OSM',
+                    label: 'OpenStreetMap',
+                    active: mapProvider.value === 'osm'
+                }
+            ]
+        },
+        {
+            key: 'travel',
+            label: 'Reisen',
+            items: isAdmin.value
+                ? [
+                    { key: 'POI Mode', label: 'POI-Modus', active: poiMode.value },
+                    { key: 'Manual Travel', label: 'Manuelle Reisen' }
+                ]
+                : []
+        },
+        {
+            key: 'export',
+            label: 'Daten und Export',
+            items: [{ key: 'Export als KML', label: 'KML exportieren' }]
+        }
+    ]
 
-const menuitems = computed(() => {
-    const items = []
-    items.push({
-        key: 'Refresh from server',
-        label: 'Refresh from server',
-        disabled: isOffline.value
-    })
     if (isAdmin.value) {
-        items.push(
-            { key: 'POI Mode', label: 'POI Mode' },
-            { key: 'Manual Travel', label: 'Manual Travel' },
-            { key: 'Settings', label: 'Settings' }
-        )
+        groups.push({
+            key: 'admin',
+            label: 'Admin',
+            items: [
+                { key: 'Settings', label: 'Einstellungen' },
+                { key: 'Prefetch again', label: 'Cache neu aufbauen' },
+                { key: 'Debug', label: 'Debug' }
+            ]
+        })
     }
-    items.push({ key: 'About', label: 'About' }, { key: 'Export als KML', label: 'Export als KML' })
-    if (isAdmin.value) {
-        items.push({ key: 'Debug', label: 'Debug' }, { key: 'Prefetch again', label: 'Prefetch again' })
-    }
+
+    const accountItems = [{ key: 'About', label: 'Ueber die App' }]
     if (authState.value.authenticated) {
         const name = String(authState.value.user || '').trim()
-        items.push({ key: 'Log Out', label: name ? `Log Out (${name})` : 'Log Out' })
+        accountItems.push({ key: 'Log Out', label: name ? `Logout (${name})` : 'Logout' })
     }
-    return items
+    groups.push({
+        key: 'account',
+        label: 'Konto und Hilfe',
+        items: accountItems
+    })
+
+    return groups.filter(group => group.items.length > 0)
 })
 async function domenu(item) {
     switch (item) {
@@ -158,6 +196,12 @@ async function domenu(item) {
         case 'POI Mode':
             poiMode.value = !poiMode.value
             console.log('POI Mode toggled:', poiMode.value)
+            break;
+        case 'Map Provider Google':
+            setMapProvider('google')
+            break;
+        case 'Map Provider OSM':
+            setMapProvider('osm')
             break;
         case 'Settings':
             configdialog.value = true
@@ -290,23 +334,7 @@ onMounted(async () => {
                     >
                     </v-app-bar-nav-icon>
                 </template>
-                <v-list density="compact">
-                <v-list-item class="map-provider-menu-item">
-                    <v-select
-                        density="comfortable"
-                        hide-details
-                        variant="outlined"
-                        prepend-inner-icon="mdi-map"
-                        label="Kartenanbieter"
-                        :items="mapProviderOptions"
-                        item-title="title"
-                        item-value="value"
-                        :model-value="mapProvider"
-                        class="map-provider-menu-select"
-                        @update:model-value="handleMapProviderChange"
-                    ></v-select>
-                </v-list-item>
-                <v-divider></v-divider>
+                <v-list density="compact" open-strategy="single">
                 <v-list-item v-if="smAndDown">
                     <v-select
                         :label="''"
@@ -367,22 +395,30 @@ onMounted(async () => {
                         </template>
                     </v-select>
                 </v-list-item>
-                <v-list-item
-                        v-for="(item, index) in menuitems"
-                        :key="index"
-                        :value="item.key"
-                        :disabled="item.disabled"
-                    >
-                        <v-list-item-title @click="domenu(item.key)">
-                            <template v-if="item.key === 'POI Mode'">
-                                <v-icon :icon="poiMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'" size="small" class="mr-2"></v-icon>
-                                POI Mode
+                <template v-for="group in menuGroups" :key="group.key">
+                    <v-list-group :value="group.key">
+                        <template v-slot:activator="{ props }">
+                            <v-list-item v-bind="props" :title="group.label"></v-list-item>
+                        </template>
+                        <v-list-item
+                            v-for="item in group.items"
+                            :key="item.key"
+                            :value="item.key"
+                            :disabled="item.disabled"
+                            @click="domenu(item.key)"
+                        >
+                            <template v-slot:append>
+                                <v-icon
+                                    v-if="item.active"
+                                    icon="mdi-check"
+                                    size="small"
+                                    class="ml-2"
+                                ></v-icon>
                             </template>
-                            <template v-else>
-                                {{ item.label }}
-                            </template>
-                        </v-list-item-title>
-                    </v-list-item>
+                            <v-list-item-title>{{ item.label }}</v-list-item-title>
+                        </v-list-item>
+                    </v-list-group>
+                </template>
                 </v-list>
             </v-menu>
             <!--v-app-bar-title class="ml-2">Traccar Viewer</v-app-bar-title-->
@@ -616,30 +652,6 @@ onMounted(async () => {
 
 .travel-menu-multi {
   margin: 0;
-}
-
-.map-provider-menu-item {
-  overflow: visible;
-  min-height: 74px !important;
-  align-items: flex-start !important;
-  padding-top: 6px;
-  padding-bottom: 8px;
-}
-
-.map-provider-menu-select {
-  margin-top: 3px;
-}
-
-.map-provider-menu-item :deep(.v-list-item__content) {
-  overflow: visible !important;
-  width: 100%;
-}
-
-.map-provider-menu-item :deep(.v-input),
-.map-provider-menu-item :deep(.v-field),
-.map-provider-menu-item :deep(.v-field__overlay),
-.map-provider-menu-item :deep(.v-field__field) {
-  overflow: visible !important;
 }
 
 :deep(.travel-select-menu .v-list-item__content) {
