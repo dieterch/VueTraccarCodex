@@ -54,6 +54,7 @@ const lassoPath = ref<Array<{ lat: number; lng: number }>>([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
+const manualTravelImportInput = ref<HTMLInputElement | null>(null)
 
 const history = ref<ManualPoint[][]>([])
 const historyIndex = ref<number>(-1)
@@ -234,6 +235,175 @@ function formatTravelDate(value: string) {
     month: 'numeric',
     year: 'numeric'
   }).format(date)
+}
+
+function sanitizeFilename(value: string) {
+  return String(value || 'manual-travel')
+    .trim()
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) || 'manual-travel'
+}
+
+function normalizeImportTravel(travelData: any) {
+  if (!travelData) return null
+  return {
+    title: travelData.title || travelData.name || 'Imported manual travel',
+    source_device_id: Number(travelData.source_device_id ?? travelData.sourceDeviceId ?? selectedDeviceId.value ?? device.value?.id),
+    from_date: travelData.from_date || travelData.fromDate,
+    to_date: travelData.to_date || travelData.toDate,
+    notes: travelData.notes || null
+  }
+}
+
+function normalizeAttributes(value: any) {
+  if (!value) return {}
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) || {}
+    } catch {
+      return {}
+    }
+  }
+  return value
+}
+
+function normalizeImportPositions(positions: any[]) {
+  return positions
+    .map(pos => ({
+      fixTime: pos.fix_time || pos.fixTime,
+      latitude: Number(pos.latitude),
+      longitude: Number(pos.longitude),
+      speed: pos.speed ?? null,
+      altitude: pos.altitude ?? null,
+      attributes: normalizeAttributes(pos.attributes)
+    }))
+    .filter(pos => pos.fixTime && Number.isFinite(pos.latitude) && Number.isFinite(pos.longitude))
+}
+
+function normalizeManualTravelImport(data: any) {
+  if (data?.travel && Array.isArray(data.positions)) {
+    return [{ travel: data.travel, positions: data.positions }]
+  }
+  if (Array.isArray(data?.travels)) {
+    return data.travels
+      .map((bundle: any) => ({ travel: bundle.travel, positions: bundle.positions || [] }))
+      .filter((bundle: any) => bundle.travel)
+  }
+  return []
+}
+
+function openManualTravelImportPicker() {
+  error.value = null
+  manualTravelImportInput.value?.click()
+}
+
+async function exportManualTravel(item: any) {
+  if (!item?.id || typeof window === 'undefined') return
+  error.value = null
+  loading.value = true
+
+  try {
+    const positions = await $fetch<any[]>(`/api/manual-travels/${item.id}/positions`)
+    const payload = {
+      meta: {
+        source: 'manual-travel-ui',
+        version: 1,
+        created: new Date().toISOString(),
+        count: 1
+      },
+      travel: {
+        id: item.id,
+        title: item.title,
+        name: item.title,
+        source_device_id: item.source_device_id,
+        from_date: item.from_date,
+        to_date: item.to_date,
+        notes: item.notes || null,
+        created_at: item.created_at || null
+      },
+      positions: positions.map(pos => ({
+        id: pos.id,
+        travel_id: pos.travel_id || item.id,
+        fix_time: pos.fix_time || pos.fixTime,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        speed: pos.speed ?? null,
+        altitude: pos.altitude ?? null,
+        attributes: pos.attributes || {}
+      }))
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${sanitizeFilename(item.title)}-${item.id}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (err: any) {
+    console.error('Failed to export manual travel:', err)
+    error.value = 'Fehler beim Export der manuellen Reise.'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function importManualTravelFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  error.value = null
+  loading.value = true
+  try {
+    const text = await file.text()
+    const data = JSON.parse(text)
+    const bundles = normalizeManualTravelImport(data)
+    if (bundles.length === 0) {
+      throw new Error('No manual travel data found')
+    }
+
+    const imports = bundles.map(bundle => ({
+      travel: normalizeImportTravel(bundle.travel),
+      positions: normalizeImportPositions(bundle.positions || [])
+    }))
+
+    if (imports.some(item => !item.travel?.title || !item.travel.source_device_id || !item.travel.from_date || !item.travel.to_date || item.positions.length === 0)) {
+      throw new Error('Invalid manual travel import data')
+    }
+
+    let lastImportedId: string | null = null
+    for (const item of imports) {
+      const createResponse = await $fetch<{ id: string }>('/api/manual-travels', {
+        method: 'POST',
+        body: item.travel
+      })
+      lastImportedId = createResponse.id
+
+      await $fetch(`/api/manual-travels/${createResponse.id}/positions`, {
+        method: 'POST',
+        body: { positions: item.positions }
+      })
+    }
+
+    await loadManualTravels()
+    if (lastImportedId) {
+      const imported = manualTravels.value.find(item => item.id === lastImportedId)
+      if (imported) {
+        await loadManualTravel(imported)
+      }
+    }
+  } catch (err: any) {
+    console.error('Failed to import manual travel:', err)
+    error.value = 'Fehler beim Import der manuellen Reise-Datei.'
+  } finally {
+    loading.value = false
+    input.value = ''
+  }
 }
 
 async function loadPoints() {
@@ -807,6 +977,19 @@ function runDataReduction() {
             <v-btn icon="mdi-format-list-bulleted" size="small" v-bind="props"></v-btn>
           </template>
           <v-list density="compact" lines="one" class="manual-travel-list">
+            <v-list-item>
+              <v-btn
+                size="small"
+                color="primary"
+                variant="tonal"
+                block
+                @click="openManualTravelImportPicker"
+              >
+                <v-icon icon="mdi-file-import" size="small" class="mr-1"></v-icon>
+                Import JSON
+              </v-btn>
+            </v-list-item>
+            <v-divider class="my-1"></v-divider>
             <v-list-item
               v-for="item in manualTravels"
               :key="item.id"
@@ -828,6 +1011,13 @@ function runDataReduction() {
                   Laden
                 </v-btn>
                 <v-btn
+                  icon="mdi-file-export"
+                  size="x-small"
+                  color="secondary"
+                  variant="text"
+                  @click="exportManualTravel(item)"
+                ></v-btn>
+                <v-btn
                   icon="mdi-delete"
                   size="x-small"
                   color="error"
@@ -842,6 +1032,13 @@ function runDataReduction() {
             </v-list-item>
           </v-list>
         </v-menu>
+        <input
+          ref="manualTravelImportInput"
+          type="file"
+          accept="application/json,.json"
+          class="d-none"
+          @change="importManualTravelFile"
+        />
         <v-btn icon="mdi-close" @click="closeDialog"></v-btn>
       </v-toolbar>
 
