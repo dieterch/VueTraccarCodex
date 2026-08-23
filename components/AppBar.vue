@@ -45,6 +45,8 @@ const cachedTravelUpdatedLabel = computed(() => {
 const allTravelsSelected = computed(() => travels.value.length > 0 && selectedTravels.value.length === travels.value.length);
 const someTravelsSelected = computed(() => selectedTravels.value.length > 0 && !allTravelsSelected.value);
 const livePollingSecondsLabel = computed(() => `${Math.round(livePollingIntervalMs.value / 1000)}s`);
+const copyMessage = ref('');
+const copyMessageVisible = ref(false);
 
 function travelKey(item) {
     const source = item?.source || 'auto';
@@ -55,6 +57,49 @@ function travelKey(item) {
 function isTravelSelected(item) {
     const key = travelKey(item);
     return selectedTravels.value.some(selected => travelKey(selected) === key);
+}
+
+function getTravelPatchKey(item) {
+    const raw = item?.raw || item;
+    return String(raw?.farthestStandstill?.address || raw?.title || '').trim();
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+}
+
+async function copyTravelPatchKey(item) {
+    if (typeof window === 'undefined') return;
+
+    const patchKey = getTravelPatchKey(item);
+    if (!patchKey) {
+        copyMessage.value = 'Kein Patch-Key gefunden';
+        copyMessageVisible.value = true;
+        return;
+    }
+
+    try {
+        await copyTextToClipboard(patchKey);
+        copyMessage.value = `Patch-Key kopiert: ${patchKey}`;
+    } catch (error) {
+        console.error('Failed to copy travel patch key:', error);
+        copyMessage.value = 'Patch-Key konnte nicht kopiert werden';
+    } finally {
+        copyMessageVisible.value = true;
+    }
 }
 
 function openSettingsDialog() {
@@ -380,7 +425,12 @@ onMounted(async () => {
                             <span v-if="index === 1" class="text-caption ml-1">+{{ selectedTravels.length - 1 }}</span>
                         </template>
                         <template v-slot:item="{ props, item }">
-                            <v-list-item v-bind="props" :title="null" :subtitle="null">
+                            <v-list-item
+                                v-bind="props"
+                                :title="null"
+                                :subtitle="null"
+                                @contextmenu.prevent.stop="copyTravelPatchKey(item.raw || item)"
+                            >
                                 <template v-slot:prepend>
                                     <v-icon
                                         :icon="isTravelSelected(item.raw || item) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
@@ -391,6 +441,9 @@ onMounted(async () => {
                                 <v-list-item-title class="d-flex align-center">
                                     <span>{{ item.raw?.title || item.title }}</span>
                                 </v-list-item-title>
+                                <v-list-item-subtitle v-if="getTravelPatchKey(item.raw || item)">
+                                    Patch-Key: {{ getTravelPatchKey(item.raw || item) }}
+                                </v-list-item-subtitle>
                             </v-list-item>
                         </template>
                     </v-select>
@@ -469,7 +522,12 @@ onMounted(async () => {
                     <span v-if="index === 1" class="text-caption ml-1">+{{ selectedTravels.length - 1 }}</span>
                 </template>
                 <template v-slot:item="{ props, item }">
-                    <v-list-item v-bind="props" :title="null" :subtitle="null">
+                    <v-list-item
+                        v-bind="props"
+                        :title="null"
+                        :subtitle="null"
+                        @contextmenu.prevent.stop="copyTravelPatchKey(item.raw || item)"
+                    >
                         <template v-slot:prepend>
                             <v-icon
                                 :icon="isTravelSelected(item.raw || item) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
@@ -480,6 +538,9 @@ onMounted(async () => {
                         <v-list-item-title class="d-flex align-center">
                             <span>{{ item.raw?.title || item.title }}</span>
                         </v-list-item-title>
+                        <v-list-item-subtitle v-if="getTravelPatchKey(item.raw || item)">
+                            Patch-Key: {{ getTravelPatchKey(item.raw || item) }}
+                        </v-list-item-subtitle>
                     </v-list-item>
                 </template>
             </v-select>
@@ -594,6 +655,14 @@ onMounted(async () => {
             </v-menu-->
         </template>
     </v-app-bar>
+    <v-snackbar
+        v-model="copyMessageVisible"
+        timeout="2500"
+        location="bottom"
+        color="grey-darken-3"
+    >
+        {{ copyMessage }}
+    </v-snackbar>
 </template>
 
 <style scoped>
