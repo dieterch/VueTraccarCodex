@@ -195,7 +195,7 @@ const menuGroups = computed(() => {
             items: isAdmin.value
                 ? [
                     { key: 'POI Mode', label: 'POI-Modus', active: poiMode.value },
-                    { key: 'Manual Travel', label: 'Manuelle Reisen' }
+                    { key: 'Manual Travel', label: 'Manuelle Reisen & Reparatur' }
                 ]
                 : []
         },

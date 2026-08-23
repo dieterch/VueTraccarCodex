@@ -26,6 +26,8 @@ const devices = ref<TraccarDevice[]>([])
 const selectedDeviceId = ref<number | null>(null)
 const manualTravels = ref<any[]>([])
 const editingTravelId = ref<string | null>(null)
+const editorMode = ref<'manual' | 'repair'>('manual')
+const selectedRepairTravelKey = ref<string | null>(null)
 
 const fromInput = ref<string>('2019-05-05T00:00')
 const toInput = ref<string>(new Date().toISOString().slice(0, 16))
@@ -33,6 +35,14 @@ const toInput = ref<string>(new Date().toISOString().slice(0, 16))
 const rawPoints = ref<ManualPoint[]>([])
 const currentPoints = ref<ManualPoint[]>([])
 const selectedPointIds = ref<string[]>([])
+const replacementDeviceId = ref<number | null>(null)
+const replacementFromInput = ref<string>('2019-05-05T00:00')
+const replacementToInput = ref<string>(new Date().toISOString().slice(0, 16))
+const replacementPoints = ref<ManualPoint[]>([])
+const selectedReplacementPointIds = ref<string[]>([])
+const selectionLayer = ref<'target' | 'replacement'>('target')
+const manualPointMode = ref(false)
+const manualPointTimeInput = ref<string>(new Date().toISOString().slice(0, 16))
 
 const title = ref<string>('')
 const notes = ref<string>('')
@@ -77,7 +87,9 @@ const canUndo = computed(() => historyIndex.value > 0)
 const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 
 const selectedCount = computed(() => selectedPointIds.value.length)
+const selectedReplacementCount = computed(() => selectedReplacementPointIds.value.length)
 const pointsCount = computed(() => currentPoints.value.length)
+const replacementPointsCount = computed(() => replacementPoints.value.length)
 
 const mapRef = ref<any>(null)
 const mapCenter = ref<{ lat: number; lng: number }>({ lat: 0, lng: 0 })
@@ -93,12 +105,69 @@ function setMapToPoints(points: ManualPoint[]) {
 }
 
 const polylinePath = computed(() => currentPoints.value.map(p => ({ lat: p.latitude, lng: p.longitude })))
+const rawPolylinePath = computed(() => rawPoints.value.map(p => ({ lat: p.latitude, lng: p.longitude })))
+const replacementPolylinePath = computed(() => replacementPoints.value.map(p => ({ lat: p.latitude, lng: p.longitude })))
 
 const selectedMarkers = computed(() => {
   const selectedSet = new Set(selectedPointIds.value)
   const markers = currentPoints.value.filter(p => selectedSet.has(p.id))
   return markers.slice(0, 500)
 })
+const selectedReplacementMarkers = computed(() => {
+  const selectedSet = new Set(selectedReplacementPointIds.value)
+  const markers = replacementPoints.value.filter(p => selectedSet.has(p.id))
+  return markers.slice(0, 500)
+})
+const manualMarkers = computed(() => {
+  return currentPoints.value
+    .filter(p => p.attributes?.source === 'manual-repair')
+    .slice(0, 500)
+})
+const repairTravelOptions = computed(() => {
+  return travels.value
+    .filter(item => item?.source !== 'manual')
+    .map(item => ({
+      title: `${item.title || 'Reise'} (${formatTravelDate(item.von)} - ${formatTravelDate(item.bis)})`,
+      value: getTravelOptionKey(item),
+      raw: item
+    }))
+})
+
+function getTravelOptionKey(item: any) {
+  return `${item?.source || 'auto'}:${item?.id || `${item?.deviceId || ''}:${item?.von}:${item?.bis}`}`
+}
+
+function normalizeRoutePoint(pos: any, source: string): ManualPoint {
+  return {
+    id: String(pos.id || `${source}-${pos.fixTime}-${pos.latitude}-${pos.longitude}`),
+    fixTime: pos.fixTime || pos.fix_time,
+    latitude: Number(pos.latitude),
+    longitude: Number(pos.longitude),
+    speed: pos.speed,
+    altitude: pos.altitude,
+    attributes: {
+      ...(pos.attributes || {}),
+      source
+    }
+  }
+}
+
+function sortPointsByTime(points: ManualPoint[]) {
+  return [...points].sort((a, b) => new Date(a.fixTime).getTime() - new Date(b.fixTime).getTime())
+}
+
+function setRepairMode(value: string | null) {
+  editorMode.value = value === 'repair' ? 'repair' : 'manual'
+  clearRepairState()
+}
+
+function clearRepairState() {
+  selectedRepairTravelKey.value = null
+  replacementPoints.value = []
+  selectedReplacementPointIds.value = []
+  selectionLayer.value = 'target'
+  manualPointMode.value = false
+}
 
 async function loadDevices() {
   try {
@@ -184,15 +253,7 @@ async function loadPoints() {
       }
     })
 
-    const points: ManualPoint[] = route.map(pos => ({
-      id: String(pos.id),
-      fixTime: pos.fixTime,
-      latitude: pos.latitude,
-      longitude: pos.longitude,
-      speed: pos.speed,
-      altitude: pos.altitude,
-      attributes: pos.attributes || {}
-    }))
+    const points: ManualPoint[] = route.map(pos => normalizeRoutePoint(pos, editorMode.value === 'repair' ? 'repair-original' : 'manual-source'))
 
     rawPoints.value = points
     currentPoints.value = clonePoints(points)
@@ -201,6 +262,7 @@ async function loadPoints() {
     resetHistory(points)
     setMapToPoints(points)
     mapZoom.value = 6
+    manualPointTimeInput.value = fromInput.value
   } catch (err: any) {
     console.error('Failed to load points:', err)
     error.value = 'Fehler beim Laden der Positionsdaten.'
@@ -209,9 +271,69 @@ async function loadPoints() {
   }
 }
 
+async function loadRepairTravel() {
+  const option = repairTravelOptions.value.find(item => item.value === selectedRepairTravelKey.value)
+  const item = option?.raw
+  if (!item) {
+    error.value = 'Bitte Zielreise auswählen.'
+    return
+  }
+
+  selectedDeviceId.value = Number(item.deviceId || device.value?.id || selectedDeviceId.value)
+  fromInput.value = item.von ? item.von.slice(0, 16) : fromInput.value
+  toInput.value = item.bis ? item.bis.slice(0, 16) : toInput.value
+  replacementFromInput.value = fromInput.value
+  replacementToInput.value = toInput.value
+  manualPointTimeInput.value = fromInput.value
+  title.value = `Reparatur - ${item.title || 'Reise'}`
+  notes.value = [
+    `Repair for ${item.source || 'auto'} travel ${item.id || selectedRepairTravelKey.value}`,
+    `Original title: ${item.title || ''}`
+  ].filter(Boolean).join('\n')
+
+  await loadPoints()
+}
+
+async function loadReplacementPoints() {
+  error.value = null
+  const fromDate = parseInputDate(replacementFromInput.value)
+  const toDate = parseInputDate(replacementToInput.value)
+
+  if (!replacementDeviceId.value || !fromDate || !toDate) {
+    error.value = 'Bitte Ersatzgerät und Zeitraum auswählen.'
+    return
+  }
+
+  loading.value = true
+  try {
+    const route = await $fetch<any[]>('/api/manual-route', {
+      method: 'POST',
+      body: {
+        deviceId: replacementDeviceId.value,
+        from: fromDate.toISOString(),
+        to: toDate.toISOString()
+      }
+    })
+
+    replacementPoints.value = route.map(pos => normalizeRoutePoint(pos, 'repair-replacement'))
+    selectedReplacementPointIds.value = []
+    selectionLayer.value = 'replacement'
+    if (replacementPoints.value.length > 0) {
+      setMapToPoints(replacementPoints.value)
+    }
+  } catch (err: any) {
+    console.error('Failed to load replacement points:', err)
+    error.value = 'Fehler beim Laden der Ersatzdaten.'
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadManualTravel(item: any) {
   if (!item?.id) return
   error.value = null
+  editorMode.value = 'manual'
+  clearRepairState()
   loading.value = true
   try {
     const positions = await $fetch<any[]>(`/api/manual-travels/${item.id}/positions`)
@@ -248,7 +370,12 @@ async function loadManualTravel(item: any) {
 }
 
 function onMapClick(event: any) {
-  if (!lassoMode.value || !event?.latLng) return
+  if (!event?.latLng) return
+  if (manualPointMode.value) {
+    addManualPoint(event.latLng.lat(), event.latLng.lng())
+    return
+  }
+  if (!lassoMode.value) return
   lassoPath.value = [
     ...lassoPath.value,
     { lat: event.latLng.lat(), lng: event.latLng.lng() }
@@ -258,14 +385,20 @@ function onMapClick(event: any) {
 function clearLasso() {
   lassoPath.value = []
   selectedPointIds.value = []
+  selectedReplacementPointIds.value = []
 }
 
 function applyLassoSelection() {
   if (lassoPath.value.length < 3) return
-  const selected = currentPoints.value
+  const points = selectionLayer.value === 'replacement' ? replacementPoints.value : currentPoints.value
+  const selected = points
     .filter(p => isPointInPolygon({ lat: p.latitude, lng: p.longitude }, lassoPath.value))
     .map(p => p.id)
-  selectedPointIds.value = selected
+  if (selectionLayer.value === 'replacement') {
+    selectedReplacementPointIds.value = selected
+  } else {
+    selectedPointIds.value = selected
+  }
 }
 
 function deleteSelection() {
@@ -289,10 +422,61 @@ function keepSelection() {
 function resetWorkspace() {
   currentPoints.value = clonePoints(rawPoints.value)
   selectedPointIds.value = []
+  selectedReplacementPointIds.value = []
   lassoPath.value = []
   resetHistory(currentPoints.value)
   setMapToPoints(currentPoints.value)
   mapZoom.value = 6
+}
+
+function importReplacementSelection() {
+  const selectedSet = new Set(selectedReplacementPointIds.value)
+  const points = selectedSet.size > 0
+    ? replacementPoints.value.filter(p => selectedSet.has(p.id))
+    : replacementPoints.value
+
+  if (points.length === 0) {
+    error.value = 'Keine Ersatzpunkte zum Übernehmen ausgewählt.'
+    return
+  }
+
+  const importId = Date.now()
+  currentPoints.value = sortPointsByTime([
+    ...currentPoints.value,
+    ...points.map((p, index) => ({
+      ...p,
+      id: `replacement-${importId}-${index}-${p.id}`,
+      attributes: {
+        ...(p.attributes || {}),
+        source: 'repair-replacement',
+        sourceDeviceId: replacementDeviceId.value
+      }
+    }))
+  ])
+  selectedReplacementPointIds.value = []
+  selectedPointIds.value = []
+  lassoPath.value = []
+  pushHistory(currentPoints.value)
+}
+
+function addManualPoint(lat: number, lng: number) {
+  const parsed = parseInputDate(manualPointTimeInput.value)
+  const fixTime = parsed?.toISOString() || new Date().toISOString()
+  const point: ManualPoint = {
+    id: `manual-repair-${Date.now()}-${Math.round(Math.random() * 100000)}`,
+    fixTime,
+    latitude: lat,
+    longitude: lng,
+    speed: 0,
+    altitude: 0,
+    attributes: {
+      source: 'manual-repair'
+    }
+  }
+
+  currentPoints.value = sortPointsByTime([...currentPoints.value, point])
+  selectedPointIds.value = [point.id]
+  pushHistory(currentPoints.value)
 }
 
 function undo() {
@@ -332,9 +516,16 @@ async function saveTravel() {
   saving.value = true
   error.value = null
   try {
+    currentPoints.value = sortPointsByTime(currentPoints.value)
     const minMax = getMinMaxTimes(currentPoints.value)
     const fromDate = minMax?.from || new Date(fromInput.value).toISOString()
     const toDate = minMax?.to || new Date(toInput.value).toISOString()
+    const savedNotes = editorMode.value === 'repair'
+      ? [
+          notes.value.trim(),
+          `Repair mode: replacementDeviceId=${replacementDeviceId.value || 'none'}`
+        ].filter(Boolean).join('\n')
+      : notes.value.trim()
 
     let travelId = editingTravelId.value
     if (travelId) {
@@ -345,7 +536,7 @@ async function saveTravel() {
           source_device_id: selectedDeviceId.value,
           from_date: fromDate,
           to_date: toDate,
-          notes: notes.value.trim() || null
+          notes: savedNotes || null
         }
       })
     } else {
@@ -356,7 +547,7 @@ async function saveTravel() {
           source_device_id: selectedDeviceId.value,
           from_date: fromDate,
           to_date: toDate,
-          notes: notes.value.trim() || null
+          notes: savedNotes || null
         }
       })
       travelId = createResponse.id
@@ -385,9 +576,10 @@ async function saveTravel() {
       source_device_id: selectedDeviceId.value,
       from_date: fromDate,
       to_date: toDate,
-      notes: notes.value.trim() || null
+      notes: savedNotes || null
     }
     upsertManualTravelInList(updated)
+    clearRepairState()
     manualtraveldialog.value = false
   } catch (err: any) {
     console.error('Failed to save manual travel:', err)
@@ -414,6 +606,7 @@ async function deleteManualTravel(id: string) {
 
 function closeDialog() {
   editingTravelId.value = null
+  clearRepairState()
   manualtraveldialog.value = false
 }
 
@@ -608,10 +801,42 @@ function runDataReduction() {
       </v-toolbar>
 
       <v-card-text class="pt-6">
+        <v-row class="mb-2 compact-row" align="center">
+          <v-col cols="12" md="3" class="compact-col">
+            <v-btn-toggle
+              :model-value="editorMode"
+              density="compact"
+              mandatory
+              divided
+              @update:model-value="setRepairMode"
+            >
+              <v-btn value="manual" size="small">Manuell</v-btn>
+              <v-btn value="repair" size="small">Reparatur</v-btn>
+            </v-btn-toggle>
+          </v-col>
+          <v-col v-if="editorMode === 'repair'" cols="12" md="6" class="compact-col">
+            <v-select
+              label="Kaputte Reise"
+              :items="repairTravelOptions"
+              item-title="title"
+              item-value="value"
+              v-model="selectedRepairTravelKey"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-select>
+          </v-col>
+          <v-col v-if="editorMode === 'repair'" cols="12" md="3" class="d-flex align-center ga-2 compact-col">
+            <v-btn size="small" color="primary" @click="loadRepairTravel" :disabled="!selectedRepairTravelKey" :loading="loading">
+              Vorlage laden
+            </v-btn>
+          </v-col>
+        </v-row>
+
         <v-row class="mb-1 compact-row" align="center">
           <v-col cols="12" md="3" class="compact-col">
             <v-select
-              label="Gerät"
+              :label="editorMode === 'repair' ? 'Originalgerät' : 'Gerät'"
               :items="devices"
               item-title="name"
               item-value="id"
@@ -642,8 +867,51 @@ function runDataReduction() {
             ></v-text-field>
           </v-col>
           <v-col cols="12" md="3" class="d-flex align-center ga-2 compact-col">
-            <v-btn size="small" color="primary" @click="loadPoints" :loading="loading">Daten laden</v-btn>
+            <v-btn size="small" color="primary" @click="loadPoints" :loading="loading">
+              {{ editorMode === 'repair' ? 'Originalspur laden' : 'Daten laden' }}
+            </v-btn>
             <span class="text-caption">Punkte: {{ pointsCount }}</span>
+          </v-col>
+        </v-row>
+
+        <v-row v-if="editorMode === 'repair'" class="mb-1 compact-row" align="center">
+          <v-col cols="12" md="3" class="compact-col">
+            <v-select
+              label="Ersatzgerät"
+              :items="devices"
+              item-title="name"
+              item-value="id"
+              v-model="replacementDeviceId"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-select>
+          </v-col>
+          <v-col cols="12" md="3" class="compact-col">
+            <v-text-field
+              label="Ersatz von"
+              type="datetime-local"
+              v-model="replacementFromInput"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="3" class="compact-col">
+            <v-text-field
+              label="Ersatz bis"
+              type="datetime-local"
+              v-model="replacementToInput"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex align-center ga-2 compact-col">
+            <v-btn size="small" color="info" @click="loadReplacementPoints" :loading="loading">
+              Ersatzspur laden
+            </v-btn>
+            <span class="text-caption">Ersatz: {{ replacementPointsCount }}</span>
           </v-col>
         </v-row>
 
@@ -670,7 +938,53 @@ function runDataReduction() {
           </v-col>
           <v-col cols="12" md="3" class="d-flex align-center ga-2 compact-col">
             <v-btn size="small" color="success" @click="saveTravel" :loading="saving">Speichern</v-btn>
-            <span class="text-caption">Auswahl: {{ selectedCount }}</span>
+            <span class="text-caption">
+              Auswahl: {{ selectionLayer === 'replacement' ? selectedReplacementCount : selectedCount }}
+            </span>
+          </v-col>
+        </v-row>
+
+        <v-row v-if="editorMode === 'repair'" class="mb-1 compact-row" align="center">
+          <v-col cols="12" md="3" class="compact-col">
+            <v-btn-toggle
+              v-model="selectionLayer"
+              density="compact"
+              mandatory
+              divided
+            >
+              <v-btn value="target" size="small">Zielspur</v-btn>
+              <v-btn value="replacement" size="small">Ersatzspur</v-btn>
+            </v-btn-toggle>
+          </v-col>
+          <v-col cols="12" md="3" class="compact-col">
+            <v-text-field
+              label="Zeit fuer manuelle Punkte"
+              type="datetime-local"
+              v-model="manualPointTimeInput"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="6" class="d-flex flex-wrap align-center ga-2 compact-col">
+            <v-btn
+              size="small"
+              color="info"
+              @click="importReplacementSelection"
+              :disabled="replacementPointsCount === 0"
+            >
+              {{ selectedReplacementCount > 0 ? 'Auswahl übernehmen' : 'Ersatzspur übernehmen' }}
+            </v-btn>
+            <v-btn
+              size="small"
+              :color="manualPointMode ? 'orange-darken-2' : 'grey-darken-1'"
+              @click="manualPointMode = !manualPointMode"
+            >
+              {{ manualPointMode ? 'Punkt setzen aktiv' : 'Punkt setzen' }}
+            </v-btn>
+            <span class="text-caption">
+              Grau: Original · Blau: Ersatz · Grün: Reparatur · Orange: manuell
+            </span>
           </v-col>
         </v-row>
 
@@ -679,7 +993,7 @@ function runDataReduction() {
             <v-btn
               size="small"
               :color="lassoMode ? 'warning' : 'grey-darken-1'"
-              @click="lassoMode = !lassoMode"
+              @click="lassoMode = !lassoMode; manualPointMode = false"
             >
               {{ lassoMode ? 'Lasso aktiv' : 'Lasso' }}
             </v-btn>
@@ -729,12 +1043,32 @@ function runDataReduction() {
             @idle="syncMapView"
           >
             <Polyline
+              v-if="editorMode === 'repair' && rawPolylinePath.length > 0"
+              :options="{
+                path: rawPolylinePath,
+                strokeColor: '#757575',
+                strokeOpacity: 0.45,
+                strokeWeight: 5
+              }"
+            />
+
+            <Polyline
+              v-if="editorMode === 'repair' && replacementPolylinePath.length > 0"
+              :options="{
+                path: replacementPolylinePath,
+                strokeColor: '#2196f3',
+                strokeOpacity: 0.75,
+                strokeWeight: 3
+              }"
+            />
+
+            <Polyline
               v-if="polylinePath.length > 0"
               :options="{
                 path: polylinePath,
-                strokeColor: '#1976d2',
+                strokeColor: editorMode === 'repair' ? '#2e7d32' : '#1976d2',
                 strokeOpacity: 0.9,
-                strokeWeight: 3
+                strokeWeight: editorMode === 'repair' ? 4 : 3
               }"
             />
 
@@ -747,6 +1081,38 @@ function runDataReduction() {
                 strokeWeight: 2,
                 fillColor: '#ffcc80',
                 fillOpacity: 0.2
+              }"
+            />
+
+            <Marker
+              v-for="marker in selectedReplacementMarkers"
+              :key="`replacement-${marker.id}`"
+              :options="{
+                position: { lat: marker.latitude, lng: marker.longitude },
+                icon: {
+                  path: 0,
+                  fillColor: '#2196f3',
+                  fillOpacity: 1,
+                  strokeWeight: 1,
+                  strokeColor: '#ffffff',
+                  scale: 6
+                }
+              }"
+            />
+
+            <Marker
+              v-for="marker in manualMarkers"
+              :key="`manual-${marker.id}`"
+              :options="{
+                position: { lat: marker.latitude, lng: marker.longitude },
+                icon: {
+                  path: 0,
+                  fillColor: '#fb8c00',
+                  fillOpacity: 1,
+                  strokeWeight: 1,
+                  strokeColor: '#ffffff',
+                  scale: 5
+                }
               }"
             />
 
