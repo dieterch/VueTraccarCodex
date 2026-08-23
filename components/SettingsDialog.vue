@@ -203,12 +203,26 @@ function cancelEdit() {
 // Save travel patch
 async function saveTravelPatch(patch) {
   try {
+    const previousAddressKey = editingPatch.value
+    const nextAddressKey = String(patch.addressKey || '').trim()
+    const payload = {
+      ...patch,
+      addressKey: nextAddressKey
+    }
+
     await $fetch('/api/travel-patches', {
       method: 'POST',
-      body: patch
+      body: payload
     })
+
+    if (previousAddressKey && previousAddressKey !== nextAddressKey) {
+      await $fetch(`/api/travel-patches/${encodeURIComponent(previousAddressKey)}`, {
+        method: 'DELETE'
+      })
+    }
+
     await loadTravelPatches()
-    successMessage.value = editingPatch.value
+    successMessage.value = previousAddressKey
       ? 'Travel patch updated successfully'
       : 'Travel patch saved successfully'
     editingPatch.value = null
@@ -666,7 +680,6 @@ watch(() => configdialog.value, async (isOpen) => {
                         hint="The destination address to match (e.g., 'Krk, Croatia')"
                         persistent-hint
                         class="mb-3"
-                        :readonly="!!editingPatch"
                       ></v-text-field>
 
                       <v-text-field
