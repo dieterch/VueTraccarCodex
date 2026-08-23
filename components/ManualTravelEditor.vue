@@ -138,7 +138,6 @@ const repairTravelOptions = computed(() => {
       raw: item
     }))
 })
-
 function getTravelOptionKey(item: any) {
   return `${item?.source || 'auto'}:${item?.id || `${item?.deviceId || ''}:${item?.von}:${item?.bis}`}`
 }
@@ -235,6 +234,22 @@ function formatTravelDate(value: string) {
     month: 'numeric',
     year: 'numeric'
   }).format(date)
+}
+
+function isSavedRepairTravel(item: any) {
+  const titleValue = String(item?.title || '').toLowerCase()
+  const notesValue = String(item?.notes || '').toLowerCase()
+  return titleValue.startsWith('reparatur -') ||
+    notesValue.includes('repair mode:') ||
+    notesValue.includes('repair for ')
+}
+
+function hasRepairPointSources(points: ManualPoint[]) {
+  return points.some(point => [
+    'repair-original',
+    'repair-replacement',
+    'manual-repair'
+  ].includes(String(point.attributes?.source || '')))
 }
 
 function sanitizeFilename(value: string) {
@@ -507,7 +522,6 @@ async function loadReplacementPoints() {
 async function loadManualTravel(item: any) {
   if (!item?.id) return
   error.value = null
-  editorMode.value = 'manual'
   clearRepairState()
   loading.value = true
   try {
@@ -521,6 +535,7 @@ async function loadManualTravel(item: any) {
       altitude: pos.altitude,
       attributes: pos.attributes || {}
     }))
+    editorMode.value = isSavedRepairTravel(item) || hasRepairPointSources(points) ? 'repair' : 'manual'
 
     editingTravelId.value = String(item.id)
     title.value = item.title || ''
