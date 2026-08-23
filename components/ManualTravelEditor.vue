@@ -43,6 +43,7 @@ const selectedReplacementPointIds = ref<string[]>([])
 const selectionLayer = ref<'target' | 'replacement'>('target')
 const manualPointMode = ref(false)
 const manualPointTimeInput = ref<string>(new Date().toISOString().slice(0, 16))
+const selectedManualPointTimeInput = ref<string>(new Date().toISOString().slice(0, 16))
 
 const title = ref<string>('')
 const notes = ref<string>('')
@@ -90,6 +91,10 @@ const selectedCount = computed(() => selectedPointIds.value.length)
 const selectedReplacementCount = computed(() => selectedReplacementPointIds.value.length)
 const pointsCount = computed(() => currentPoints.value.length)
 const replacementPointsCount = computed(() => replacementPoints.value.length)
+const selectedManualPointCount = computed(() => {
+  const selectedSet = new Set(selectedPointIds.value)
+  return currentPoints.value.filter(p => selectedSet.has(p.id) && p.attributes?.source === 'manual-repair').length
+})
 
 const mapRef = ref<any>(null)
 const mapCenter = ref<{ lat: number; lng: number }>({ lat: 0, lng: 0 })
@@ -476,6 +481,46 @@ function addManualPoint(lat: number, lng: number) {
 
   currentPoints.value = sortPointsByTime([...currentPoints.value, point])
   selectedPointIds.value = [point.id]
+  selectedManualPointTimeInput.value = manualPointTimeInput.value
+  pushHistory(currentPoints.value)
+}
+
+function shiftSelectedManualPointTimes() {
+  const parsed = parseInputDate(selectedManualPointTimeInput.value)
+  if (!parsed) {
+    error.value = 'Bitte gültige Zielzeit fuer manuelle Punkte auswählen.'
+    return
+  }
+
+  const selectedSet = new Set(selectedPointIds.value)
+  const selectedManualIds = new Set(
+    currentPoints.value
+      .filter(p => selectedSet.has(p.id) && p.attributes?.source === 'manual-repair')
+      .map(p => p.id)
+  )
+
+  if (selectedManualIds.size === 0) {
+    error.value = 'Keine manuellen Reparaturpunkte ausgewählt.'
+    return
+  }
+
+  const fixTime = parsed.toISOString()
+  currentPoints.value = sortPointsByTime(
+    currentPoints.value.map(p => selectedManualIds.has(p.id)
+      ? {
+          ...p,
+          fixTime,
+          attributes: {
+            ...(p.attributes || {}),
+            source: 'manual-repair',
+            timeAdjusted: true
+          }
+        }
+      : p
+    )
+  )
+  selectedPointIds.value = [...selectedManualIds]
+  error.value = null
   pushHistory(currentPoints.value)
 }
 
@@ -966,7 +1011,17 @@ function runDataReduction() {
               hide-details
             ></v-text-field>
           </v-col>
-          <v-col cols="12" md="6" class="d-flex flex-wrap align-center ga-2 compact-col">
+          <v-col cols="12" md="3" class="compact-col">
+            <v-text-field
+              label="Neue Zeit fuer Auswahl"
+              type="datetime-local"
+              v-model="selectedManualPointTimeInput"
+              density="compact"
+              variant="outlined"
+              hide-details
+            ></v-text-field>
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex flex-wrap align-center ga-2 compact-col">
             <v-btn
               size="small"
               color="info"
@@ -982,8 +1037,18 @@ function runDataReduction() {
             >
               {{ manualPointMode ? 'Punkt setzen aktiv' : 'Punkt setzen' }}
             </v-btn>
+            <v-btn
+              size="small"
+              color="orange-darken-2"
+              @click="shiftSelectedManualPointTimes"
+              :disabled="selectedManualPointCount === 0"
+            >
+              Zeit setzen
+            </v-btn>
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex align-center compact-col">
             <span class="text-caption">
-              Grau: Original · Blau: Ersatz · Grün: Reparatur · Orange: manuell
+              Manuell gewählt: {{ selectedManualPointCount }} · Grau: Original · Blau: Ersatz · Grün: Reparatur · Orange: manuell
             </span>
           </v-col>
         </v-row>
