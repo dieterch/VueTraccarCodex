@@ -1,4 +1,4 @@
-# VueTraccarNuxt - Software Specification Document
+# VueTraccarCodex - Software Specification Document
 
 **Version:** 1.0.3
 **Last Updated:** 2026-02-09
@@ -7,9 +7,23 @@
 
 ---
 
+## Current State Notice
+
+This long-form specification contains historical architecture context. For the current concise contract, see `dTraccarCodex_spec.md` and `public/openapi.yaml`.
+
+Current security-relevant rules:
+- Legacy `/api/settings` endpoints have been removed.
+- Frontend settings use only `GET /api/settings/public` and `POST /api/settings/public`.
+- Settings endpoints expose only frontend-safe fields; server secrets are not returned and are not accepted.
+- Web auth uses Authelia forward-auth plus an app JWT cookie.
+- Native mobile auth uses short-lived bearer JWTs plus rotating opaque refresh tokens.
+- Manual and repaired travels support browser JSON import/export from the editor.
+
+---
+
 ## 1. Executive Summary
 
-VueTraccarNuxt is a modern web application for GPS tracking, route visualization, and travel management. It integrates with Traccar GPS tracking systems, Google Maps, and WordPress to provide comprehensive travel analysis, standstill detection, and travel blog integration.
+VueTraccarCodex is a modern web application for GPS tracking, route visualization, and travel management. It integrates with Traccar GPS tracking systems, Google Maps, and WordPress to provide comprehensive travel analysis, standstill detection, and travel blog integration.
 
 ### Key Capabilities
 - Real-time GPS tracking via Traccar API integration
@@ -19,7 +33,7 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 - WordPress blog integration for travel documentation
 - RST document management for location notes
 - Manual POI creation and management (Cmd/Ctrl+Click on map)
-- Manual travel editor (manual reconstruction of historic trips)
+- Manual travel and repair editor with JSON import/export
 - KML export for route sharing
 - Admin-only settings management (JWT-based)
 - Data export/import scripts for backup and portability
@@ -30,14 +44,14 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 ## 2. Technology Stack
 
 ### Frontend
-- **Framework:** Nuxt 4 with Vue 3 (Composition API)
+- **Framework:** Nuxt 3 with Vue 3 (Composition API)
 - **UI Library:** Vuetify 3 (Material Design)
 - **Maps:** vue3-google-map + Google Maps JavaScript API
 - **Editor:** md-editor-v3 (Markdown preview)
 - **Language:** TypeScript
 
 ### Backend
-- **Runtime:** Nuxt 4 Server Routes (Node.js)
+- **Runtime:** Nuxt 3 Server Routes (Node.js)
 - **Database:** SQLite 3 with better-sqlite3
 - **HTTP Client:** Axios
 - **Data Format:** YAML (configuration)
@@ -68,7 +82,7 @@ VueTraccarNuxt is a modern web application for GPS tracking, route visualization
 └─────────────────────────────────────────────────────────┘
                             ↕ HTTP/REST
 ┌─────────────────────────────────────────────────────────┐
-│              Nuxt 4 Server (Node.js)                     │
+│              Nuxt 3 Server (Node.js)                     │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  API Routes (14 endpoints)                      │   │
 │  │  /api/devices, /api/route, /api/travels, etc.  │   │
@@ -354,31 +368,25 @@ interface KMLOptions {
 ### 4.7 Settings Management
 
 #### 4.7.1 Settings Architecture
-- **Primary Storage:** `data/settings.yml` (YAML, auto-created on first access)
+- **Frontend-editable Storage:** `data/settings.yml` (YAML, public-safe fields only)
 - **Database Storage:** `app.db` (SQLite, travel_patches only)
-- **Fallback:** Environment variables (.env)
-- **Override Priority:** settings.yml > .env > defaults
+- **Secrets:** Environment variables / private server runtime config only
+- **Public Settings Endpoint:** `/api/settings/public`
 
 #### 4.7.2 Settings Categories
 
 **1. Traccar API Configuration**
-- URL (e.g., https://tracking.example.com)
-- Username (email)
-- Password (visible)
 - Device ID (dropdown selection)
+- Device name
 
 **2. Google Maps Configuration**
-- API Key (visible)
-- Map ID (optional)
+- Map ID
+- Browser API key is configured through environment/runtime public config and must be restricted in Google Cloud Console
 
 **3. WordPress Integration**
-- WordPress URL
-- Username
-- Application Password (visible)
 - Cache duration (seconds)
 
 **4. Application Settings**
-- Legacy app/settings password fields (not used for auth)
 - Home mode (boolean toggle)
 - Home latitude/longitude
 - Analysis parameters
@@ -404,14 +412,15 @@ interface KMLOptions {
 #### 4.7.3 Settings UI Features
 - **Access Control:** Admin-only (JWT-based)
 - **Field Types:**
-  - Text inputs (URLs, usernames, secrets)
+  - Text inputs (public-safe labels/coordinates/dates)
   - Number inputs (durations, thresholds)
   - Boolean toggles (switches)
   - Datetime pickers
   - Dropdowns (device/geofence selection)
 - **Validation:**
-  - Reject empty strings on save
-  - Format validation (URLs, emails)
+  - Strict whitelist
+  - Reject unknown/forbidden fields
+  - Type validation
 - **User Feedback:**
   - Loading states
   - Success/error alerts
@@ -419,13 +428,13 @@ interface KMLOptions {
 
 #### 4.7.4 Settings Persistence Flow
 1. User opens Settings dialog (admin-only)
-2. System loads current settings from /api/settings (creates settings.yml if missing)
+2. System loads current frontend-safe settings from `/api/settings/public`
 3. System fetches dropdowns (devices, geofences)
 4. User modifies settings
 5. User clicks "Save All Settings"
-6. System posts to /api/settings
-7. Server writes to data/settings.yml
-8. On next app restart, settings.yml values override .env
+6. System posts to `/api/settings/public`
+7. Server writes only whitelisted public-safe fields to `data/settings.yml`
+8. Secrets remain in `.env` / deployment environment
 
 ### 4.8 Security Features
 
@@ -435,16 +444,16 @@ interface KMLOptions {
 - **Role Enforcement:** Admin role required for Settings endpoints and UI
 
 #### 4.8.2 Sensitive Data Protection
-- **Secrets Visibility:** Settings secrets are visible to admins; HTTPS required in production
+- **Secrets Visibility:** Settings endpoints do not return or accept server secrets
 - **Git Ignore:**
   - `data/settings.yml`
   - `data/cache/*.db`
   - Backup files (*~, *.bak)
-- **Server-Side Validation:** Input validation with empty-string rejection
+- **Server-Side Validation:** Strict schema/whitelist validation
 
 #### 4.8.3 Configuration Security
 - **Environment Variables:** Never committed to git
-- **YAML Files:** Excluded from version control
+- **YAML Files:** Excluded from version control; do not use for secrets
 - **Database Files:** Local only, not tracked
 
 ---
@@ -835,26 +844,17 @@ Array<{
 
 ### 5.4 Settings Endpoints
 
-#### GET /api/settings
-**Description:** Get all current settings (admin-only)
+#### GET /api/settings/public
+**Description:** Get frontend-safe editable settings (admin-only)
 **Response:**
 ```typescript
 {
   success: boolean
   settings: {
-    traccarUrl: string
-    traccarUser: string
-    traccarPassword: string
-    traccarDeviceId: number
+    traccarDeviceId: number | null
     traccarDeviceName: string
-    googleMapsApiKey: string
     googleMapsMapId: string
-    wordpressUrl: string
-    wordpressUser: string
-    wordpressAppPassword: string
     wordpressCacheDuration: number
-    vueTraccarPassword: string
-    settingsPassword: string
     homeMode: boolean
     homeLatitude: string
     homeLongitude: string
@@ -886,14 +886,15 @@ Array<{
 }
 ```
 
-#### POST /api/settings
-**Description:** Save all settings to YAML file (admin-only, rejects empty strings)
-**Request Body:** Same as GET response
+#### POST /api/settings/public
+**Description:** Save frontend-safe editable settings (admin-only, strict whitelist)
+**Request Body:** Public settings object only; secret/internal fields are rejected
 **Response:**
 ```typescript
 {
   success: boolean
   message: string
+  settings: PublicSettings
 }
 ```
 
@@ -1545,10 +1546,10 @@ HOST=0.0.0.0
 **File:** `nuxt.config.ts`
 
 **Settings Loading:**
-1. Read `data/settings.yml` at startup
-2. Override `process.env` with YAML values
-3. Pass to Nuxt runtime config
-4. Make available to server/client
+1. Read server secrets from `.env` / deployment environment
+2. Read frontend-safe editable values from `data/settings.yml`
+3. Pass server-only values to private runtime config
+4. Pass browser-safe values only through public runtime config
 
 **Runtime Config Structure:**
 ```typescript
@@ -1558,11 +1559,11 @@ export default defineNuxtConfig({
     traccarUrl: process.env.TRACCAR_URL,
     traccarUser: process.env.TRACCAR_USER,
     traccarPassword: process.env.TRACCAR_PASSWORD,
-    traccarDeviceId: parseInt(process.env.TRACCAR_DEVICE_ID),
-    // ... all settings
+    // ...
     public: {
       // Client-accessible
       googleMapsApiKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+      googleMapsMapId: process.env.NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID,
       autheliaLogoutUrl: process.env.NUXT_PUBLIC_AUTHELIA_LOGOUT_URL
     }
   }
@@ -1573,20 +1574,23 @@ export default defineNuxtConfig({
 
 **Workflow:**
 1. User modifies settings in SettingsDialog
-2. POST to `/api/settings` with new values
-3. Server validates settings
-4. Server writes to `data/settings.yml`
-5. On next restart, YAML values override .env
+2. POST to `/api/settings/public` with frontend-safe values only
+3. Server validates strict public settings whitelist
+4. Server writes public-safe values to `data/settings.yml`
+5. Secrets remain in `.env` / deployment environment
 
 **YAML Structure:**
 ```yaml
-# This file overrides .env settings
-# Generated by SettingsDialog
-
-# Traccar Configuration
-traccarUrl: "https://tracking.example.com"
-traccarUser: "user@example.com"
-# ... all settings
+# Frontend-safe editable settings only
+traccarDeviceId: 4
+traccarDeviceName: "Device"
+googleMapsMapId: "map-id"
+wordpressCacheDuration: 3600
+homeMode: false
+eventMinGap: 60
+minDays: 2
+maxDays: 170
+standPeriod: 12
 ```
 
 ---
@@ -1891,7 +1895,7 @@ npm run preview
 
 **File Structure:**
 ```
-VueTraccarNuxt/
+VueTraccarCodex/
 ├── .env (not committed)
 ├── data/
 │   ├── cache/
@@ -1932,13 +1936,13 @@ pm2 startup
 **Systemd Service:**
 ```ini
 [Unit]
-Description=VueTraccarNuxt
+Description=VueTraccarCodex
 After=network.target
 
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/var/www/VueTraccarNuxt
+WorkingDirectory=/var/www/VueTraccarCodex
 ExecStart=/usr/bin/npm run preview
 Restart=on-failure
 
@@ -2652,7 +2656,7 @@ CREATE TABLE manual_travel_positions (
 - ✅ Multiple bug fixes and optimizations
 
 **Migration from Python:**
-- Complete rewrite from Python/Quart to Nuxt 4/TypeScript
+- Complete rewrite from Python/Quart to Nuxt 3/TypeScript
 - Replaced 32MB HDF5 file with SQLite databases
 - Replaced Pandas DataFrames with native TypeScript arrays
 - All 14 API endpoints implemented
@@ -2673,13 +2677,13 @@ CREATE TABLE manual_travel_positions (
 Python/Quart backend with Vue 2 frontend
 
 ### 18.2 Migration
-**VueTraccarNuxt** migrated to Nuxt 4 with TypeScript
+**VueTraccarCodex** migrated to Nuxt 3 with TypeScript
 Migration performed with **Claude Code** (Anthropic)
 Date: February 2026
 
 ### 18.3 Key Contributors
 - Dieter Chvatal (Original author, project owner)
-- Claude Sonnet 4.5 (AI assistant, code generation)
+- AI-assisted code generation
 
 ### 18.4 License
 Same as original VueTraccar project
@@ -2687,7 +2691,7 @@ Same as original VueTraccar project
 
 ### 18.5 Dependencies
 See `package.json` for full list. Key dependencies:
-- Nuxt 4 (MIT)
+- Nuxt 3 (MIT)
 - Vue 3 (MIT)
 - Vuetify 3 (MIT)
 - better-sqlite3 (MIT)
@@ -2734,7 +2738,7 @@ See `package.json` for full list. Key dependencies:
 ### 19.3 References
 
 **Documentation:**
-- [Nuxt 4 Docs](https://nuxt.com/)
+- [Nuxt 3 Docs](https://nuxt.com/)
 - [Vue 3 Docs](https://vuejs.org/)
 - [Vuetify 3 Docs](https://vuetifyjs.com/)
 - [Traccar API Docs](https://www.traccar.org/api-reference/)
@@ -2760,8 +2764,8 @@ See `package.json` for full list. Key dependencies:
 **Last Updated:** 2026-02-07
 **Format:** Markdown
 **Version:** 1.0.1
-**Author:** Claude Sonnet 4.5 (based on git commits and project analysis)
+**Author:** Project maintainers
 **Word Count:** ~13,000 words
 **Page Count:** ~65 pages (printed)
 
-This specification document provides comprehensive coverage of the VueTraccarNuxt application, from architecture to deployment. It serves as both technical documentation for developers and reference material for stakeholders.
+This specification document provides comprehensive coverage of the VueTraccarCodex application, from architecture to deployment. It serves as both technical documentation for developers and reference material for stakeholders.

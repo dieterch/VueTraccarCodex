@@ -1,16 +1,21 @@
-# dTraccarCodex – Current Backend/Frontend Spec
+# dTraccarCodex Current Spec
 
 ## Scope
-Nuxt 3 + Nitro application with authenticated `/api/*` backend, mobile bearer auth, and admin-managed public settings.
+
+Nuxt 3 + Nitro application with authenticated `/api/*` backend, Authelia-protected web UI, mobile bearer auth, admin-managed public settings, and manual travel repair/import/export workflows.
 
 ## Authentication Model
 
-### Web flow
-- Web authentication is handled via Authelia forward-auth headers through `/api/auth/token`.
-- `/api/auth/token` issues the app JWT cookie after validating forwarded identity headers.
-- Web API calls can use cookie auth as currently implemented by middleware.
+### Web Flow
 
-### Mobile flow
+- Web authentication is handled by Authelia forward-auth in front of the app.
+- `/api/auth/token` validates forwarded identity headers and issues the app JWT cookie.
+- `/api/auth/me` returns the current app auth state.
+- `/api/auth/logout` clears the app auth cookie.
+- Normal web routes and `/docs` should remain protected by Authelia in production.
+
+### Mobile Flow
+
 - `POST /api/mobile/auth/login` is public and returns:
   - short-lived access JWT (`accessToken`, default 15m)
   - opaque refresh token (`refreshToken`, default 30d)
@@ -19,32 +24,33 @@ Nuxt 3 + Nitro application with authenticated `/api/*` backend, mobile bearer au
 - Refresh tokens are random opaque values; only HMAC hashes are stored server-side.
 - Refresh-token reuse detection revokes the full token family and returns `401`.
 - All other `/api/mobile/*` routes are bearer-only.
-- Missing/invalid bearer on `/api/mobile/*` returns JSON:
-  - `401 { "error": "unauthorized" }`
+- Cookie auth is not accepted on protected `/api/mobile/*` routes.
+- Missing/invalid bearer on `/api/mobile/*` returns JSON `401 { "error": "unauthorized" }`.
 
-### General API behavior
-- `/api/*` accepts valid bearer tokens.
-- If bearer is missing on non-mobile routes, existing web cookie/auth behavior applies.
+### General API Behavior
+
+- Existing `/api/*` routes accept valid bearer tokens.
+- If bearer is missing on non-mobile routes, existing web cookie/Authelia behavior applies.
+- Invalid bearer returns JSON `401` rather than a browser redirect.
 
 ## Settings Model
 
-### Public editable settings
-- Endpoints:
-  - `GET /api/settings/public`
-  - `POST /api/settings/public`
+### Public Editable Settings
+
+Endpoints:
+
+- `GET /api/settings/public`
+- `POST /api/settings/public`
+
+Rules:
+
 - Admin-only access.
 - Strict whitelist input validation on POST.
-- Only safe/public fields are exposed and writable.
+- Secret/internal fields are never serialized.
+- Secret/internal fields are rejected when submitted.
 
-### Removed legacy endpoint
-- Legacy `/api/settings` endpoints are removed.
+Editable/returned fields:
 
-### Secret/internal settings
-- Never exposed through frontend settings endpoints.
-- Managed only via environment/private runtime config.
-
-## Public Settings Contract
-Editable/returned fields on `/api/settings/public`:
 - `traccarDeviceId`
 - `traccarDeviceName`
 - `googleMapsMapId`
@@ -63,30 +69,74 @@ Editable/returned fields on `/api/settings/public`:
 - `sideTripDevices`
 - `sideTripBufferHours`
 
+### Removed Legacy Endpoint
+
+- Legacy `/api/settings` endpoints are removed.
+- OpenAPI must not document `/api/settings`.
+
+### Secret/Internal Settings
+
+- Never exposed through frontend settings endpoints.
+- Managed only via `.env`, deployment environment, and server-side runtime config.
+- Google Maps API key is a browser/public key and remains in `runtimeConfig.public`; restrict it by Google referrer/API settings.
+
+## Manual Travel And Repair Model
+
+### Persistence
+
+Manual and repaired travels are stored in:
+
+- `manual_travels`
+- `manual_travel_positions`
+
+Both appear in `/api/travels` as `source: "manual"`.
+
+### Editor Behavior
+
+- Manual mode creates curated travels from raw route points.
+- Repair mode can load a broken travel, replacement-device points, and manually inserted points.
+- Saved repairs are recognized by title/notes/position attributes and reopen in repair mode.
+- Repair point sources are stored in `attributes.source`:
+  - `repair-original`
+  - `repair-replacement`
+  - `manual-repair`
+
+### Browser JSON Import/Export
+
+- The editor can export one saved manual/repaired travel as JSON.
+- The editor can import JSON from the local browser file picker.
+- Import creates a new travel and does not overwrite or merge.
+- Importing the same JSON twice creates duplicates.
+- Server-side scripts remain available for full backup/restore.
+
 ## Production Secret Requirements
+
 The server fails startup in production if required secrets are missing/weak.
 
 Required:
+
 - `JWT_SECRET`
 - `MOBILE_REFRESH_TOKEN_HASH_SECRET`
 - `TRACCAR_PASSWORD`
 - `SETTINGS_PASSWORD`
 
 Conditional:
-- If `WORDPRESS_URL` is set, then also required:
+
+- If `WORDPRESS_URL` is set:
   - `WORDPRESS_USER`
   - `WORDPRESS_APP_PASSWORD`
 
 ## OpenAPI
-- Source: `public/openapi.yaml`
-- Settings path documented as `/api/settings/public`.
-- No `/api/settings` path in contract.
 
-## Security Constraints
-- No secrets in frontend settings UI.
-- No secret serialization in `/api/settings/public` responses.
-- No secret acceptance in `/api/settings/public` requests.
+- Source: `public/openapi.yaml`
+- Served at `/openapi.yaml`
+- Swagger UI at `/docs`
+- Settings path documented only as `/api/settings/public`.
+- Mobile auth paths documented with access/refresh token schemas.
 
 ## Validation Baseline
+
 - Build: `npm run build`
-- Settings security tests: `node --test tests/settings-public.test.mjs`
+- All backend tests: `npm test`
+- Focused settings tests: `node --test tests/settings-public.test.mjs`
+- Focused mobile refresh tests: `node --test tests/mobile-refresh.test.mjs`

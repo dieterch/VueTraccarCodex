@@ -1,150 +1,93 @@
 # VueTraccarCodex
 
-**Version:** 1.0.2
-**Author:** Dieter Chvatal
+Nuxt 3/Nitro application for Traccar-based travel analysis, map rendering, manual travel repair, WordPress-linked travel notes, and native mobile API access.
 
-Modern Nuxt 3 rewrite of VueTraccar with TypeScript backend, replacing Python/Quart with Nuxt server routes. A comprehensive GPS tracking, route visualization, and travel management system.
+## Current Architecture
 
-## Features
+- Frontend: Nuxt 3, Vue 3 Composition API, Vuetify 3
+- Backend: Nuxt/Nitro server routes under `server/api`
+- Storage:
+  - `data/cache/route.db` for cached Traccar route/events/standstill data
+  - `data/app.db` for travel patches, manual POIs, manual travels, and repair data
+  - `data/settings.yml` for frontend-editable public settings only
+  - `data/documents/` for marker documents
+- Maps:
+  - Google Maps JavaScript API
+  - Leaflet/OpenStreetMap adapter support in the frontend
+- Auth:
+  - Web: Authelia forward-auth plus app JWT cookie
+  - Mobile: bearer access JWT plus rotating opaque refresh token
 
-- 🚀 **Nuxt 3** with TypeScript backend
-- 🗺️ **Google Maps** integration with route visualization
-- 📍 **GPS Tracking** via Traccar API with automatic caching
-- 🗄️ **Dual SQLite Databases** (route.db for caching, app.db for settings)
-- 🧭 **Intelligent Route Analysis** with standstill detection (>12 hours)
-- ✈️ **Automatic Travel Detection** from geofence events
-- 📝 **WordPress Integration** for travel blogs
-- 📄 **RST Document Management** for location notes
-- 📍 **Manual POI Creation** (Cmd/Ctrl+Click on map)
-- ✍️ **Manual Travel Editor** for curated historic trips
-- 🎯 **POI Mode** for independent point-of-interest markers
-- 📥 **KML Export** for route sharing (Google Earth compatible)
-- 🔐 **JWT Authorization** for API access (Authelia forward-auth integration)
-- 🎨 **Vuetify 3** Material Design UI
-- ⚡ **Fast Performance** with WAL mode SQLite
-- 💾 **Data Export/Import Scripts** for backup and portability
+## Main Features
 
-## Tech Stack
-
-### Frontend
-- **Framework:** Nuxt 3 with Vue 3 (Composition API)
-- **UI Library:** Vuetify 3 (Material Design)
-- **Maps:** vue3-google-map + Google Maps JavaScript API
-- **Editor:** md-editor-v3 (Markdown preview)
-- **Language:** TypeScript
-- **Loading:** vue-loading-overlay
-
-### Backend
-- **Runtime:** Nuxt 3 Server Routes (h3, Node.js)
-- **Database:** SQLite 3 with better-sqlite3 (dual database architecture)
-- **HTTP Client:** Axios (Traccar & WordPress APIs)
-- **Configuration:** YAML parser for settings
-- **Language:** TypeScript
-
-### External Integrations
-- **GPS Platform:** Traccar GPS Tracking System
-- **CMS:** WordPress REST API v2 (optional)
-- **Maps Provider:** Google Maps Platform
-- **Geocoding:** Google Maps Geocoding API
-
-## Project Structure
-
-```
-VueTraccarCodex/
-├── server/
-│   ├── api/              # 20+ API endpoints
-│   │   ├── devices.ts, route.ts, events.ts, plotmaps.ts
-│   │   ├── prefetchroute.ts, delprefetch.ts, cache-status.ts
-│   │   ├── travels.ts, download.kml.ts
-│   │   ├── travel-patches.ts, travel-patches/[addressKey].ts
-│   │   ├── settings.ts
-│   │   ├── auth/token.ts, auth/me.ts, auth/logout.ts
-│   │   ├── document/[key].ts
-│   │   ├── wordpress/posts/[tag].ts, wordpress/test.ts
-│   │   └── geofences.ts
-│   ├── services/         # Business logic
-│   │   ├── traccar.service.ts      # GPS data fetching & caching
-│   │   ├── route-analyzer.ts       # Standstill detection & geocoding
-│   │   ├── travel-analyzer.ts      # Travel detection & patches
-│   │   ├── wordpress.service.ts    # WordPress API client
-│   │   ├── document-manager.ts     # RST document handling
-│   │   ├── kml-generator.ts        # KML export generation
-│   │   └── manual-travel-workspace.ts # Manual travel workspace (optional)
-│   └── utils/            # Server utilities
-│       ├── cache.ts                # route.db operations
-│       ├── app-db.ts               # app.db operations
-│       ├── auth.ts                 # JWT helpers
-│       ├── traccar-client.ts       # Traccar API client
-│       └── wordpress-client.ts     # WordPress API client
-│   └── middleware/       # Server middleware
-│       └── auth.ts                 # JWT enforcement for /api
-├── components/           # Vue components
-│   ├── AppBar.vue, GMap.vue, SideBar.vue
-│   ├── DateDialog.vue, AboutDialog.vue
-│   ├── SettingsDialog.vue          # Admin-only settings
-│   ├── MDEditorDialog.vue, MDDialog.vue
-│   └── DebugDialog.vue, Login.vue
-├── composables/          # State management
-│   ├── useTraccar.ts               # GPS & device state
-│   ├── useMapData.ts               # Map visualization state
-│   └── useDocuments.ts             # Document management
-├── utils/                # Client utilities
-│   ├── crypto.ts                   # Password hashing
-│   ├── date.ts                     # Date formatting
-│   └── maps.ts                     # Map calculations
-├── scripts/              # Data management scripts
-│   ├── export-timings.cjs          # Export standstill adjustments
-│   ├── import-timings.cjs          # Import standstill adjustments
-│   ├── export-travel-patches.cjs   # Export travel patches
-│   ├── import-travel-patches.cjs   # Import travel patches
-│   ├── export-manual-pois.cjs      # Export manual POIs
-│   ├── import-manual-pois.cjs      # Import manual POIs
-│   ├── export-manual-travels.cjs   # Export manual travels
-│   └── import-manual-travels.cjs   # Import manual travels
-├── data/
-│   ├── cache/            # SQLite databases (not in git)
-│   │   ├── route.db      # GPS positions, standstills, events
-│   │   └── app.db        # Travel patches, settings, manual POIs, manual travels
-│   ├── documents/        # RST travel notes (create manually)
-│   ├── settings.yml      # Runtime configuration (not in git)
-├── types/                # TypeScript definitions
-└── documentation/        # Project documentation
-    └── SOFTWARE_SPECIFICATION.md
-```
+- Automatic travel detection from Traccar geofence events
+- Route/standstill analysis with SQLite caching
+- Google Maps visualization with standstill markers and route polylines
+- WordPress post lookup by marker tag, for example `marker360417M56303`
+- RST/Markdown-like marker document editing
+- Manual POI creation and management
+- Travel patch management for renamed/corrupted geocoding keys
+- Manual travel reconstruction and repair editor
+- JSON import/export from the manual travel editor
+- KML export
+- OpenAPI/Swagger UI at `/docs`
+- Native iOS auth reference under `ios/`
 
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone <repository-url>
-cd VueTraccarCodex
 npm install
-
-# Configure environment
 cp .env.example .env
-# Edit .env with your Traccar and Google Maps credentials
-
-# Create data directories
 mkdir -p data/cache data/documents
-
-# Start development server
 npm run dev
-# Open http://localhost:3000
-
-# The app will automatically prefetch GPS data on first run (10-15 minutes)
 ```
 
-## Authentication (Authelia + JWT)
+Development server defaults to `http://localhost:5999` via `nuxt.config.ts`.
 
-This app expects to run behind Authelia forward-auth (e.g., via Traefik). It derives the user and role from headers and issues a short-lived JWT for API calls.
+Production build:
 
-### Required forward-auth headers
-- `Remote-User`
-- `Remote-Groups` (comma-separated, must include `admins` for admin role)
-
-### JWT and role settings
 ```bash
-# JWT configuration (Required)
+npm run build
+npm run preview
+```
+
+## Required Environment
+
+Start from `.env.example`. Do not commit real secrets.
+
+### Core Traccar
+
+```bash
+TRACCAR_URL=https://tracking.example.com
+TRACCAR_USER=your-traccar-user
+TRACCAR_PASSWORD=<traccar-password>
+TRACCAR_DEVICE_ID=4
+TRACCAR_DEVICE_NAME=Device
+```
+
+### Google Maps
+
+```bash
+NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=<google-maps-browser-key>
+NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=<google-maps-map-id>
+```
+
+The Google Maps key is a browser/public key by design. Restrict it in Google Cloud Console by HTTP referrer and enabled APIs. Do not treat it as a server secret.
+
+### WordPress Optional
+
+```bash
+WORDPRESS_URL=
+WORDPRESS_USER=
+WORDPRESS_APP_PASSWORD=
+WORDPRESS_CACHE_DURATION=3600
+```
+
+If `WORDPRESS_URL` is set in production, `WORDPRESS_USER` and `WORDPRESS_APP_PASSWORD` are required.
+
+### Web Auth
+
+```bash
 JWT_SECRET=<strong-random-secret-min-32-chars>
 JWT_TTL_SECONDS=3600
 JWT_ISSUER=vue-traccar
@@ -153,806 +96,250 @@ AUTH_COOKIE_NAME=vt_auth
 AUTH_COOKIE_SECURE=true
 ADMIN_GROUP=admins
 NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
+```
 
-# Mobile token flow (recommended for native clients)
+### Mobile Auth
+
+```bash
+MOBILE_AUTH_USERNAME=
+MOBILE_AUTH_PASSWORD_HASH=
+MOBILE_AUTH_ROLE=user
 MOBILE_JWT_TTL_SECONDS=900
 MOBILE_REFRESH_TOKEN_TTL_SECONDS=2592000
 MOBILE_REFRESH_TOKEN_HASH_SECRET=<strong-random-secret-min-32-chars>
 ```
 
-Notes:
-- Settings UI and `/api/settings/public` are admin-only.
-- Secrets are server-side only and are not returned by `/api/settings/public`.
-- If Authelia headers are missing, `/api/auth/token` returns 401.
-- Mobile auth endpoints:
-  - `POST /api/mobile/auth/login`
-  - `POST /api/mobile/auth/refresh`
-  - `POST /api/mobile/auth/logout`
+Generate `MOBILE_AUTH_PASSWORD_HASH` with:
 
-## Setup
-
-### Prerequisites
-
-- **Node.js 18+** (recommended: 20 LTS)
-- **npm** or **pnpm**
-- **Traccar GPS server** with API access
-- **Google Maps API key** (with Maps JavaScript API and Geocoding API enabled)
-- **WordPress site** (optional, for travel blog integration)
-- **512 MB RAM minimum** (1 GB recommended)
-- **1 GB disk space** (for cache and historical data)
-
-### Installation
-
-1. **Clone and install dependencies:**
-   ```bash
-   git clone <repository-url>
-   cd VueTraccarCodex
-   npm install
-   ```
-
-2. **Create data directories:**
-   ```bash
-   mkdir -p data/cache data/documents
-   ```
-
-3. **Configure environment variables:**
-
-   Copy `.env.example` to `.env` and configure:
-   ```bash
-   # Traccar API (Required)
-   TRACCAR_URL=https://tracking.example.com
-   TRACCAR_USER=your-email@example.com
-   TRACCAR_PASSWORD=your-password
-   TRACCAR_DEVICE_ID=4
-
-   # Google Maps (Required)
-   NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-api-key
-   NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=your-map-id
-
-   # WordPress (Optional)
-   WORDPRESS_URL=https://blog.example.com
-   WORDPRESS_USER=username
-   WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx
-   WORDPRESS_CACHE_DURATION=3600
-
-   # Application Security (Legacy fields, not used for auth)
-   VUE_TRACCAR_PASSWORD=your-app-password
-   SETTINGS_PASSWORD=your-settings-password
-
-   # Home Location (Optional)
-   HOME_MODE=false
-   HOME_LATITUDE=47.2692
-   HOME_LONGITUDE=11.4041
-   HOME_GEOFENCE_ID=1
-
-   # Route Analysis (Optional, defaults provided)
-   EVENT_MIN_GAP=60
-   MIN_DAYS=2
-   MAX_DAYS=170
-   STAND_PERIOD=12
-   START_DATE=2020-01-01T00:00:00Z
-
-   # Auth (Required in production)
-   JWT_SECRET=<strong-random-secret-min-32-chars>
-   JWT_TTL_SECONDS=3600
-   JWT_ISSUER=vue-traccar
-   JWT_AUDIENCE=vue-traccar-ui
-   AUTH_COOKIE_NAME=vt_auth
-   AUTH_COOKIE_SECURE=true
-   ADMIN_GROUP=admins
-   NUXT_PUBLIC_AUTHELIA_LOGOUT_URL=https://authelia.example.com/logout
-
-   # Server (Optional)
-   PORT=5999
-   HOST=0.0.0.0
-   ```
-
-4. **Google Maps API Setup:**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable **Maps JavaScript API** and **Geocoding API**
-   - Create API key and restrict by HTTP referrer
-   - Set up billing (free tier available)
-
-5. **Run development server:**
-   ```bash
-   npm run dev
-   ```
-
-   Open http://localhost:3000
-
-6. **Initial Data Prefetch:**
-
-   On first run, the app will automatically fetch and cache all historical GPS data from the Traccar API. This may take 10-15 minutes depending on your dataset size (typically 10,000-100,000 positions).
-
-   You can also manually trigger prefetch:
-   ```bash
-   curl http://localhost:3000/api/prefetchroute?deviceId=4
-   ```
-
-7. **Production Deployment:**
-   ```bash
-   npm run build
-   npm run preview
-   # Or use PM2
-   pm2 start npm --name "vue-traccar" -- run preview
-   ```
-
-## Usage Guide
-
-### First Time Setup
-
-1. **Wait for Prefetch:** First run will cache all GPS data (10-15 minutes)
-2. **Select Date Range:** Use the date picker to choose a travel period
-3. **View Travels:** Click on a travel in the sidebar to load the map
-
-### Main Features
-
-#### Viewing Travels
-1. Open the sidebar (left panel)
-2. Select date range using the calendar icon
-3. Click on any travel card to load the route on the map
-4. Map will show:
-   - **Blue polyline:** GPS route path
-   - **Red markers:** Standstill locations (>12 hours)
-   - **Numbers:** Sequential standstill order
-
-#### Exploring Standstills
-1. Click on a red marker to open InfoWindow
-2. View standstill details:
-   - Duration (hours)
-   - Address and country
-   - GPS coordinates (clickable Google Maps link)
-   - WordPress posts (if tagged)
-3. Click "Edit Document" to add private notes (RST format)
-
-#### Creating Manual POIs
-1. Enable **POI Mode** toggle in AppBar (admin-only)
-2. Hold **Cmd** (Mac) or **Ctrl** (Windows/Linux)
-3. Click anywhere on the map
-4. POI is created with automatic geocoding
-5. POIs are saved to `app.db` and can be exported
-
-#### Manual Travel Editor
-1. Open menu → **Manual Travel** (admin-only)
-2. Select device + time range and click **Daten laden**
-3. Use **Lasso** to select points, then **Auswahl löschen** or **Auswahl behalten**
-4. Optional: Undo/Redo or Reset
-5. Enter title/notes and click **Speichern**
-6. Manual travels appear in the travel dropdown with a hand icon
-
-#### Managing Settings
-1. Click menu icon (three dots) in AppBar
-2. Select "Settings" (admin-only)
-3. Configure 7 settings panels:
-   - Traccar API credentials
-   - Google Maps API key + Map ID
-   - WordPress integration (optional)
-   - Application settings (legacy password field)
-   - Home geofence selection
-   - Route analysis parameters
-   - Travel patches (overrides)
-4. Click "Save All Settings"
-5. Settings persist in `data/settings.yml` (auto-created on first load)
-6. Empty strings are rejected; keep a value or remove the field entirely
-
-#### Travel Patches (Manual Overrides)
-1. Open Settings → Travel Patches panel
-2. **Add New Patch:**
-   - Enter address key (e.g., "Vienna, Austria")
-   - Set custom title, dates, or exclude flag
-3. **Edit Existing:** Click edit icon (✏️)
-4. **Delete:** Click delete icon (🗑️) with confirmation
-
-#### Exporting Routes
-1. Load a travel on the map
-2. Click menu icon → "Download KML"
-3. KML file includes:
-   - Complete route polyline
-   - All standstill markers
-   - WordPress post titles (if available)
-4. Open in Google Earth or other KML viewer
-
-### Advanced Features
-
-#### WordPress Integration
-- Tag WordPress posts with standstill keys (e.g., `marker574701M41499`)
-- Posts appear in InfoWindows automatically
-- 1-hour cache for performance
-- **Home Mode:** Transform external URLs to internal IPs
-
-#### Document Management
-- Each standstill can have a private RST document
-- Click "Edit Document" in InfoWindow
-- Markdown preview available
-- Documents saved to `data/documents/`
-
-#### Cache Management
-- **View Status:** Menu → Cache Status
-- **Clear Cache:** Menu → Clear Cache (requires confirmation)
-- **Prefetch:** Automatically on startup, or manual via API
-
-## API Endpoints
-
-### OpenAPI / Swagger
-- OpenAPI spec file: `public/openapi.yaml`
-- Served by Nuxt at: `/openapi.yaml`
-- Swagger UI route: `/docs` (web route, protected by existing Authelia flow)
-- Import into Swagger UI Editor: https://editor.swagger.io/
-
-### GPS & Route Data
-- `GET /api/devices` - List GPS devices
-- `POST /api/route` - Get cached route positions
-- `POST /api/events` - Get geofence events
-- `POST /api/plotmaps` - Calculate map visualization data
-- `GET /api/prefetchroute` - Prefetch all historical data
-- `GET /api/delprefetch` - Clear cache
-- `GET /api/cache-status` - Get cache statistics
-- `GET /api/geofences` - List geofences from Traccar
-
-### Travel Analysis
-- `POST /api/travels` - Analyze travels from geofence events
-- `POST /api/download.kml` - Generate KML export
-
-### Manual Travels
-- `GET /api/manual-travels` - List manual travels
-- `POST /api/manual-travels` - Create manual travel
-- `DELETE /api/manual-travels/[id]` - Delete manual travel
-- `GET /api/manual-travels/[id]/positions` - List positions
-- `POST /api/manual-travels/[id]/positions` - Replace positions
-- `POST /api/manual-travel-workspace/open` - Open workspace (optional)
-- `POST /api/manual-travel-workspace/delete` - Delete selection (optional)
-- `POST /api/manual-travel-workspace/keep` - Keep selection (optional)
-- `POST /api/manual-travel-workspace/reset` - Reset workspace (optional)
-- `POST /api/manual-travel-workspace/finalize` - Finalize workspace (optional)
-
-### Travel Patches
-- `GET /api/travel-patches` - List all travel patches
-- `POST /api/travel-patches` - Create or update a travel patch
-- `DELETE /api/travel-patches/[addressKey]` - Delete a travel patch
-
-### Settings
-- `GET /api/settings/public` - Get frontend-safe editable settings
-- `POST /api/settings/public` - Save frontend-safe editable settings
-- `GET /api/side-trips/config` - Read-only side trip config for users (safe subset of settings)
-### Auth
-- `POST /api/auth/token` - Issue JWT from Authelia headers
-- `GET /api/auth/me` - Return JWT auth status
-- `POST /api/auth/logout` - Clear auth cookie
-
-### Documents
-- `GET /api/document/[key]` - Load RST document
-- `POST /api/document/[key]` - Save RST document
-
-### WordPress
-- `GET /api/wordpress/posts/[tag]` - Get posts by tag
-- `GET /api/wordpress/test` - Test connection
-
-## Key Features
-
-### Route Analysis
-- Automatic standstill detection (>12 hours stationary)
-- Reverse geocoding for addresses via Google Maps API
-- Distance calculation (Haversine formula)
-- Route visualization with polylines and markers
-- Map bounds/center/zoom auto-calculation
-
-### Travel Detection
-- Automatic trip detection from geofence events
-- Duration filtering (2-170 days)
-- Farthest standstill calculation
-- Manual patches via database
-- Travel patches management UI with edit/delete functionality
-
-### Manual POI Creation
-- Create points of interest by Cmd/Ctrl+Click on map
-- POI Mode toggle for independent markers
-- Automatic geocoding for POI locations
-- Export POIs via data management scripts
-
-### Caching Strategy
-- Dual SQLite databases:
-  - `route.db` - GPS positions, standstills, geofence events
-  - `app.db` - Travel patches, settings, manual POIs, manual travels
-- Cache-first with incremental updates
-- SQLite WAL mode for concurrent read performance
-- Automatic prefetch on startup
-- Efficient indexed queries (<500ms)
-
-### WordPress Integration
-- Tag-based post loading for standstill markers
-- 1-hour in-memory cache TTL
-- Home mode URL transformation
-- Markdown preview in InfoWindows
-- Featured image display in KML placemarks
-
-### Settings Management
-- Admin-only settings dialog (JWT-based)
-- Runtime configuration via `settings.yml` (overrides .env)
-- Secrets are visible to admins; use HTTPS in production
-- 7 configuration panels:
-  - Traccar API Configuration
-  - Google Maps Configuration
-  - WordPress Integration
-  - Application Settings
-  - Home Geofence Selection
-  - Route Analysis Parameters
-  - Travel Patches Management
-- Device and geofence dropdown selection
-
-### Data Management & Portability
-- Export/import scripts for backup and transfer
-- Four data types supported:
-  - **Standstill timing adjustments** (JSON format)
-  - **Travel patches** (YAML format)
-  - **Manual POIs** (JSON format)
-  - **Manual Travels** (JSON format)
-- Merge and replace modes for imports
-- Dry-run preview capability
-- Complete backup/restore workflows
-
-## Data Management Scripts
-
-The `/scripts` directory contains utilities for exporting and importing application data, enabling backup, restore, and transfer between instances.
-
-### Export Scripts
-
-Export all data for backup:
 ```bash
-# Export standstill timing adjustments
-node scripts/export-timings.cjs [output-file.json]
-
-# Export travel patches
-node scripts/export-travel-patches.cjs [output-file.yml]
-
-# Export manual POIs
-node scripts/export-manual-pois.cjs [output-file.json]
-
-# Export manual travels
-node scripts/export-manual-travels.cjs [travel-id] [output-file.json]
+npm run mobile:hash -- --password "your-password"
 ```
 
-### Import Scripts
+### Production Secret Checks
 
-Import data from backup:
+In production, startup fails when required secrets are missing or weak:
+
+- `JWT_SECRET`
+- `MOBILE_REFRESH_TOKEN_HASH_SECRET`
+- `TRACCAR_PASSWORD`
+- `SETTINGS_PASSWORD`
+- `WORDPRESS_USER` and `WORDPRESS_APP_PASSWORD` when `WORDPRESS_URL` is configured
+
+## Authentication Model
+
+### Web Flow
+
+- Traefik/Authelia protects normal web routes.
+- `/api/auth/token` exchanges trusted Authelia forward-auth identity headers for an app JWT cookie.
+- `/api/auth/me` reports current auth state.
+- `/api/auth/logout` clears the app cookie.
+- Non-mobile `/api/*` routes keep existing web cookie behavior when no bearer token is present.
+
+### Mobile Flow
+
+- `POST /api/mobile/auth/login` validates configured mobile credentials and returns:
+  - `accessToken` short-lived JWT, default max 15 minutes
+  - `refreshToken` random opaque token, default 30 days
+- `POST /api/mobile/auth/refresh` rotates refresh tokens and returns a new pair.
+- `POST /api/mobile/auth/logout` revokes the refresh-token family.
+- Refresh tokens are stored server-side only as HMAC hashes.
+- Refresh-token reuse revokes the full token family.
+- `/api/mobile/*` routes other than auth endpoints are bearer-only and never accept cookies.
+- Existing `/api/*` routes accept a valid `Authorization: Bearer <accessToken>` and otherwise fall back to web/cookie behavior.
+
+See `IOS-frontend.md` and `ios/README.md` for the native client reference.
+
+## Settings Model
+
+Frontend-editable settings are limited to:
+
+- `GET /api/settings/public`
+- `POST /api/settings/public`
+
+These endpoints are admin-only and use a strict whitelist. Secret/internal fields are neither returned nor accepted.
+
+Public editable fields:
+
+- `traccarDeviceId`
+- `traccarDeviceName`
+- `googleMapsMapId`
+- `wordpressCacheDuration`
+- `homeMode`
+- `homeLatitude`
+- `homeLongitude`
+- `homeGeofenceId`
+- `homeGeofenceName`
+- `eventMinGap`
+- `maxDays`
+- `minDays`
+- `standPeriod`
+- `startDate`
+- `sideTripEnabled`
+- `sideTripDevices`
+- `sideTripBufferHours`
+
+Server secrets must be configured through `.env` or deployment environment only.
+
+## Manual Travel And Repair Editor
+
+Open `Manuelle Reisen & Reparatur` from the app menu.
+
+Supported workflows:
+
+- Create a manual travel from raw Traccar positions.
+- Repair a broken travel by loading an original route, importing points from another device, and adding manual points.
+- Select points with the lasso and delete/keep selections.
+- Shift date/time for selected manual repair points.
+- Save repaired/manual travels into `manual_travels` and `manual_travel_positions`.
+- Export a saved travel as JSON from the editor menu.
+- Import a JSON file from the browser file picker.
+
+Import behavior:
+
+- Import creates a new travel; it does not overwrite or merge.
+- Importing the same file twice creates duplicates.
+- The original JSON file remains a backup artifact.
+- Duplicate imports can be removed through the editor's delete action.
+
+Detailed notes: `ManualTravelEditor.md`.
+
+## API Documentation
+
+- OpenAPI source: `public/openapi.yaml`
+- Served spec: `/openapi.yaml`
+- Swagger UI: `/docs`
+- `/docs` is a normal web route and should remain protected by Authelia in production.
+
+Key route groups:
+
+- Auth: `/api/auth/*`
+- Mobile auth: `/api/mobile/auth/*`
+- Mobile bearer-only test route: `/api/mobile/ping`
+- GPS/route: `/api/devices`, `/api/geofences`, `/api/events`, `/api/route`, `/api/plotmaps`
+- Travels: `/api/travels`, `/api/download.kml`
+- Manual travels: `/api/manual-travels/*`, `/api/manual-route`, `/api/manual-travel-workspace/*`
+- Travel patches: `/api/travel-patches/*`
+- Settings: `/api/settings/public`, `/api/side-trips/config`
+- Manual POIs: `/api/manual-pois/*`
+- Standstill adjustments: `/api/standstill-adjustments/*`
+- Documents: `/api/document/{key}`
+- WordPress: `/api/wordpress/*`
+
+Use `public/openapi.yaml` as the authoritative route contract.
+
+## Data Management
+
+Scripts are in `scripts/`; see `scripts/README.md` for full formats and options.
+
+Export examples:
+
 ```bash
-# Import with merge (default - keeps existing data)
-node scripts/import-timings.cjs timings.json
-
-# Preview import without changes
-node scripts/import-timings.cjs timings.json --dry-run
-
-# Replace all existing data
-node scripts/import-timings.cjs timings.json --replace
+node scripts/export-timings.cjs backups/timings.json
+node scripts/export-travel-patches.cjs backups/travel-patches.yml
+node scripts/export-manual-pois.cjs backups/manual-pois.json
+node scripts/export-manual-travels.cjs backups/manual-travels.json
 ```
 
-Same options apply to `import-travel-patches.cjs`, `import-manual-pois.cjs`, and `import-manual-travels.cjs`.
-
-### Complete Backup Workflow
+Import examples:
 
 ```bash
-# Create backup directory
-mkdir -p backups/$(date +%Y%m%d)
-
-# Export all data types
-node scripts/export-timings.cjs backups/$(date +%Y%m%d)/timings.json
-node scripts/export-travel-patches.cjs backups/$(date +%Y%m%d)/patches.yml
-node scripts/export-manual-pois.cjs backups/$(date +%Y%m%d)/pois.json
-node scripts/export-manual-travels.cjs backups/$(date +%Y%m%d)/manual-travels.json
-
-# Copy databases and documents
-cp data/cache/*.db backups/$(date +%Y%m%d)/
-cp -r data/documents backups/$(date +%Y%m%d)/
-cp data/settings.yml backups/$(date +%Y%m%d)/ 2>/dev/null || true
+node scripts/import-timings.cjs backups/timings.json --dry-run
+node scripts/import-travel-patches.cjs backups/travel-patches.yml --merge
+node scripts/import-manual-pois.cjs backups/manual-pois.json --replace
+node scripts/import-manual-travels.cjs backups/manual-travels.json --merge
 ```
 
-### Restore from Backup
+Recommended backup contents:
 
-```bash
-# Restore all data types (replace mode)
-node scripts/import-timings.cjs backups/20260207/timings.json --replace
-node scripts/import-travel-patches.cjs backups/20260207/patches.yml --replace
-node scripts/import-manual-pois.cjs backups/20260207/pois.json --replace
-node scripts/import-manual-travels.cjs backups/20260207/manual-travels.json --replace
+- Script exports for timings, travel patches, manual POIs, and manual travels
+- `data/app.db`
+- `data/cache/route.db` if you want to avoid rebuilding the route cache
+- `data/documents/`
+- Deployment `.env` from your secret store, not committed to git
 
-# Restore databases and documents
-cp backups/20260207/*.db data/cache/
-cp -r backups/20260207/documents data/
-cp backups/20260207/settings.yml data/
+## Project Layout
 
-# Restart application
-pm2 restart vue-traccar
+```text
+server/api/                 Nitro API routes
+server/middleware/auth.ts   API auth middleware
+server/services/            Traccar, route, travel, WordPress services
+server/utils/               SQLite, auth, settings utilities
+server/plugins/             Startup security checks
+components/                 Vue/Vuetify UI components
+composables/                Shared frontend state and API orchestration
+utils/                      Client utility functions
+data/                       Local runtime data, not for secrets in git
+public/openapi.yaml         OpenAPI contract served by /openapi.yaml
+scripts/                    Import/export and helper scripts
+ios/                        Swift mobile auth reference
 ```
 
-## Development
+## Commands
 
-### Run Tests
 ```bash
-npm run test
-```
-
-### Build for Production
-```bash
+npm run dev
 npm run build
 npm run preview
+npm test
+npm run mobile:hash -- --password "your-password"
 ```
 
-### Generate Static Site
-```bash
-npm run generate
-```
+## Tests
 
-## Production Deployment
-
-### Build and Deploy
-
-1. **Build the application:**
-   ```bash
-   npm run build
-   # Output: .output/ directory
-   ```
-
-2. **Deploy with PM2** (recommended):
-   ```bash
-   pm2 start npm --name "vue-traccar" -- run preview
-   pm2 save
-   pm2 startup
-   ```
-
-3. **Or create systemd service:**
-   ```ini
-   [Unit]
-   Description=VueTraccarNuxt
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=www-data
-   WorkingDirectory=/var/www/VueTraccarNuxt
-   ExecStart=/usr/bin/npm run preview
-   Restart=on-failure
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-### Reverse Proxy (Nginx)
-
-```nginx
-server {
-  listen 443 ssl;
-  server_name tracker.example.com;
-
-  ssl_certificate /etc/letsencrypt/live/tracker.example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/tracker.example.com/privkey.pem;
-
-  location / {
-    proxy_pass http://localhost:5999;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_cache_bypass $http_upgrade;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
-```
-
-### SSL Certificate (Let's Encrypt)
+Current backend tests use Node's built-in test runner:
 
 ```bash
-# Install Certbot
-sudo apt-get install certbot python3-certbot-nginx
-
-# Get certificate
-sudo certbot --nginx -d tracker.example.com
-
-# Auto-renewal (test)
-sudo certbot renew --dry-run
+npm test
+node --test tests/settings-public.test.mjs
+node --test tests/mobile-refresh.test.mjs
 ```
 
-### Environment Setup
+## Production Notes
 
-**Production Checklist:**
-- [ ] Set `JWT_SECRET`
-- [ ] Configure HTTPS with valid SSL certificate
-- [ ] Set `AUTH_COOKIE_SECURE=true` for HTTPS
-- [ ] Restrict Google Maps API key by HTTP referrer
-- [ ] Enable firewall (allow 443, 80, deny 5999 from external)
-- [ ] Set up automated backups (see Data Management Scripts)
-- [ ] Configure log rotation (PM2 automatic)
-- [ ] Test restore procedure from backup
-- [ ] Monitor disk space (databases can grow to 10+ MB)
-- [ ] Set up monitoring/alerts (optional: Uptime Robot, etc.)
-
-## What's New in v1.0.2
-
-### Major Features
-- **Dual Database Architecture:** Separated `route.db` (caching) and `app.db` (settings)
-- **Manual POI Creation:** Create points of interest by Cmd/Ctrl+Click on map
-- **POI Mode Toggle:** Independent marker mode for user-created POIs
-- **Settings Management UI:** Admin-only settings dialog
-- **Travel Patches Management:** Edit, create, and delete travel overrides in UI
-- **JWT Authentication:** Authelia forward-auth with JWT for API calls
-- **WordPress in KML:** Standstill markers in KML exports include WordPress titles
-- **Data Export/Import Scripts:** 6 scripts for backup/restore/portability
-- **Cache Status Endpoint:** Monitor database statistics
-- **About Dialog:** Version info and feature highlights
-
-### Security & Data Management
-- **JWT Auth:** Admin-only configuration access
-- **Sensitive Files Excluded:** `settings.yml` and databases not tracked in git
-- **Configuration Priority:** `settings.yml` overrides `.env` for runtime changes
-- **Complete Backup Workflows:** Export/import scripts for all application data
-
-### Performance & Bug Fixes
-- **Optimized Queries:** Indexed database queries (<500ms)
-- **Memory Management:** Efficient in-memory WordPress cache
-- **Multiple Bug Fixes:** Route analysis, geocoding, and UI improvements
-
-## Migration from Python Backend
-
-This project is a complete rewrite from Python/Quart to Nuxt 4 with TypeScript:
-
-| Python (VueTraccar) | Nuxt 4 (VueTraccarNuxt) |
-|---------------------|-------------------------|
-| `app.py` | `server/api/*.ts` (20+ endpoints) |
-| `dtraccar/traccar.py` | `server/services/traccar.service.ts` |
-| `route_deviceId4.hdf` (32MB HDF5) | `data/cache/route.db` (SQLite) |
-| Pandas DataFrames | Native TypeScript arrays |
-| Flask/Quart routes | Nuxt server routes (h3) |
-| Vue 2 | Vue 3 (Composition API) |
-| ~3,000 lines Python | ~5,000 lines TypeScript |
-
-**Migration Completed:** February 2026
-- All 14 original API endpoints migrated
-- Additional 6+ endpoints added (settings, travel patches, cache status)
-- All 9 Vue components rewritten
-- Complete feature parity + new features
-
-## Configuration
-
-### Configuration Priority
-
-Settings are loaded with the following priority (highest to lowest):
-1. `data/settings.yml` (auto-created on first Settings load)
-2. `.env` file (manual configuration)
-3. Environment variables
-4. Default values
-
-### Environment Variables
-
-Create `.env` file from `.env.example` and configure:
-
-```bash
-# Traccar API
-TRACCAR_URL=https://tracking.example.com
-TRACCAR_USER=your-email@example.com
-TRACCAR_PASSWORD=your-password
-TRACCAR_DEVICE_ID=4
-
-# Google Maps
-NUXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-api-key
-NUXT_PUBLIC_GOOGLE_MAPS_MAP_ID=your-map-id
-
-# WordPress (optional)
-WORDPRESS_URL=https://blog.example.com
-WORDPRESS_USER=username
-WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx
-WORDPRESS_CACHE_DURATION=3600
-
-# Application (legacy fields, not used for auth)
-VUE_TRACCAR_PASSWORD=your-app-password
-SETTINGS_PASSWORD=your-settings-password
-HOME_MODE=false
-HOME_LATITUDE=47.2692
-HOME_LONGITUDE=11.4041
-HOME_GEOFENCE_ID=1
-
-# Route Analysis
-EVENT_MIN_GAP=60
-MIN_DAYS=2
-MAX_DAYS=170
-STAND_PERIOD=12
-START_DATE=2020-01-01T00:00:00Z
-
-# Auth (Required in production)
-JWT_SECRET=<strong-random-secret-min-32-chars>
-JWT_TTL_SECONDS=3600
-JWT_ISSUER=vue-traccar
-JWT_AUDIENCE=vue-traccar-ui
-AUTH_COOKIE_NAME=vt_auth
-AUTH_COOKIE_SECURE=true
-ADMIN_GROUP=admins
-MOBILE_JWT_TTL_SECONDS=900
-MOBILE_REFRESH_TOKEN_TTL_SECONDS=2592000
-MOBILE_REFRESH_TOKEN_HASH_SECRET=<strong-random-secret-min-32-chars>
-# Server
-PORT=5999
-HOST=0.0.0.0
-```
-
-### Required Secret ENV Variables (Production)
-
-| Name | Purpose | Required |
-|------|---------|----------|
-| `JWT_SECRET` | Signs and verifies application JWTs | Yes |
-| `MOBILE_REFRESH_TOKEN_HASH_SECRET` | HMAC secret used to hash opaque mobile refresh tokens | Yes |
-| `TRACCAR_PASSWORD` | Password used for Traccar API authentication | Yes |
-| `SETTINGS_PASSWORD` | Legacy app secret (kept server-side only) | Yes |
-| `WORDPRESS_USER` | WordPress API user (if integration enabled) | Conditional |
-| `WORDPRESS_APP_PASSWORD` | WordPress API app password (if integration enabled) | Conditional |
-
-Notes:
-- If `WORDPRESS_URL` is set in production, `WORDPRESS_USER` and `WORDPRESS_APP_PASSWORD` must also be set.
-- Secrets must be configured via environment only (`.env` / deployment env), never via frontend settings endpoints.
-
-### Database Structure
-
-**route.db** (Route caching database):
-- `positions` - GPS position cache with timestamps
-- `standstills` - Detected standstill periods
-- `geofence_events` - Geofence entry/exit events
-
-**app.db** (Application database):
-- `travel_patches` - Manual travel overrides
-- `standstill_adjustments` - Timing adjustments for standstills
-- `manual_pois` - User-created points of interest
-- `manual_travels` - Manually curated travels
-- `manual_travel_positions` - Positions for manual travels
-
-### Travel Patches
-
-Travel patches can be managed via:
-1. **Settings Dialog** (recommended): Edit/create/delete patches in UI
-2. **Database Direct**: Stored in `app.db` table `travel_patches`
-
-## Performance
-
-- **SQLite Cache:** <500ms for cached queries (WAL mode enabled)
-- **Initial Prefetch:** ~10-15 minutes for full historical dataset
-- **Incremental Updates:** <2 seconds for new data
-- **Map Rendering:** <2s for 10,000+ GPS points (polyline chunking at 500 points)
-- **WordPress Cache:** 1-hour in-memory TTL, <100ms cache hits
-- **Database Size:** ~5-10MB for typical yearly dataset
-- **Memory Usage:** ~100-200MB average
-
-## Security Features
-
-- **SSO Support:** Authelia forward-auth with JWT for API calls
-- **Admin-only Settings:** Configuration UI and settings endpoints restricted to admin role
-- **Sensitive Data:**
-  - Settings secrets are visible to admins; use HTTPS in production
-  - Configuration files excluded from git (`.gitignore`)
-  - HTTPS recommended for production deployment
-- **Input Validation:** Server-side validation and prepared SQL statements
-- **GDPR Considerations:** GPS data privacy, data export (KML), cache clearing
+- Run behind HTTPS.
+- Keep Traefik/Authelia protection on normal web routes and `/docs`.
+- Keep `/api/mobile/auth/*` reachable for native clients.
+- Do not expose server ports directly to the public internet.
+- Restrict the Google Maps browser key by referrer and API.
+- Keep `.env`, `data/*.db`, and `data/settings.yml` out of git.
+- Back up `data/app.db` and `data/documents/` before risky maintenance.
 
 ## Troubleshooting
 
-### Common Issues
+No GPS data:
 
-1. **App won't start:**
-   - Check `.env` configuration
-   - Verify Node.js version (18+)
-   - Check port availability (default: 5999)
-   - Review PM2 logs: `pm2 logs vue-traccar`
+- Check `TRACCAR_URL`, `TRACCAR_USER`, `TRACCAR_PASSWORD`, and device ID.
+- Test `/api/devices` and `/api/geofences` behind authenticated web flow.
+- Rebuild cache with `/api/delprefetch` and `/api/prefetchroute` if required.
 
-2. **No GPS data:**
-   - Test Traccar API connection in Settings dialog
-   - Verify Traccar credentials
-   - Check device ID is correct
-   - Run prefetch: `GET http://localhost:5999/api/prefetchroute?deviceId=4`
+Map fails to load:
 
-3. **Map not loading:**
-   - Verify Google Maps API key in Settings
-   - Check browser console for errors
-   - Ensure API key has Maps JavaScript API and Geocoding API enabled
-   - Check API quotas in Google Cloud Console
+- Check browser console for Google Maps errors.
+- Verify Maps JavaScript API is enabled.
+- Verify referrer restrictions allow your deployment host.
 
-4. **WordPress integration fails:**
-   - Test connection via Settings dialog
-   - Verify Application Password (not regular password)
-   - Check WordPress REST API is enabled
-   - Verify tags exist in WordPress
+Settings save fails:
 
-5. **Database errors:**
-   - Check disk space availability
-   - Verify file permissions on `data/cache/` directory
-   - Rebuild cache: `GET /api/delprefetch` then `/api/prefetchroute`
+- Confirm you are admin according to `ADMIN_GROUP` / Authelia groups.
+- Only public settings fields are accepted by `/api/settings/public`.
 
-6. **Script execution errors:**
-   - Ensure running from project root
-   - Check database exists at `data/app.db`
-   - Verify read/write permissions
-   - Check file format (JSON/YAML)
+Mobile login fails:
 
-For more detailed troubleshooting, see `documentation/TROUBLESHOOTING.md`.
+- Set `MOBILE_AUTH_USERNAME` and `MOBILE_AUTH_PASSWORD_HASH`.
+- Generate the hash with `npm run mobile:hash`.
+- Ensure `JWT_SECRET` and `MOBILE_REFRESH_TOKEN_HASH_SECRET` are strong in production.
 
-## Future Enhancements
+Manual travel import creates duplicates:
 
-### Planned Features
+- This is expected; imports are append-only.
+- Delete duplicate entries from the editor menu.
 
-**Phase 1 (Q1-Q2 2026):**
-- [ ] Dark mode theme
-- [ ] Multi-user support with role-based access control
-- [ ] Mobile app (Progressive Web App)
-- [ ] Offline mode with service worker
-- [ ] Advanced analytics dashboard
-- [ ] Trip reports (PDF generation)
+## Related Documentation
 
-**Phase 2 (Q2-Q3 2026):**
-- [ ] Real-time tracking (WebSockets)
-- [ ] Geofence alerts (email/SMS notifications)
-- [ ] Fleet management (multiple devices)
-- [ ] Internationalization (i18n) support
-- [ ] Alternative map providers (OpenStreetMap, Mapbox)
-
-**Phase 3 (Q3-Q4 2026):**
-- [ ] Machine learning for trip prediction
-- [ ] Weather integration for historical data
-- [ ] Fuel consumption tracking
-- [ ] Social sharing features
-- [ ] GPX/CSV export formats
-
-**Technical Improvements:**
-- [ ] Unit tests (Vitest)
-- [ ] E2E tests (Playwright)
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Docker containerization
-- [ ] Database query optimization
-- [ ] CDN for static assets
-
-## Documentation
-
-- **Software Specification:** `documentation/SOFTWARE_SPECIFICATION.md` - Comprehensive technical documentation
-- **Migration Status:** `documentation/MIGRATION_STATUS.md` - Python to Nuxt migration details
-- **Map Debugging:** `documentation/MAP_DEBUG.md` - Map rendering and troubleshooting
-- **Troubleshooting:** `documentation/TROUBLESHOOTING.md` - Common issues and solutions
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-**Development Guidelines:**
-- Follow existing code style (TypeScript + Vue 3 Composition API)
-- Add tests for new features (when test framework is implemented)
-- Update documentation for significant changes
-- Test thoroughly with real GPS data
-
-## License
-
-Same as original VueTraccar project
-
-## Credits & Acknowledgments
-
-### Original Project
-**VueTraccar** by Dieter Chvatal
-- Python/Quart backend with Vue 2 frontend
-- Original concept and implementation
-
-### Migration
-**VueTraccarNuxt** - Nuxt 4 rewrite with TypeScript
-- Migration performed: February 2026
-- Migration tool: Claude Code (Anthropic)
-- Complete rewrite: ~5,000 lines of TypeScript/Vue 3
-
-### Key Technologies
-- **Nuxt 4** (MIT) - Full-stack framework
-- **Vue 3** (MIT) - Progressive JavaScript framework
-- **Vuetify 3** (MIT) - Material Design components
-- **better-sqlite3** (MIT) - SQLite database driver
-- **vue3-google-map** (MIT) - Google Maps integration
-- **Traccar** (Apache 2.0) - GPS tracking platform
-- **WordPress** (GPL) - Content management system
-- **Google Maps Platform** - Mapping and geocoding services
-
-### Contributors
-- Dieter Chvatal (Original author, project owner)
-- Claude Sonnet 4.5 (AI assistant, code generation)
+- `dTraccarCodex_spec.md` - Current concise backend/frontend spec
+- `SOFTWARE_SPECIFICATION.md` - Long-form system specification
+- `ManualTravelEditor.md` - Manual travel and repair editor notes
+- `IOS-frontend.md` - Native iOS frontend guide
+- `ios/README.md` - Swift mobile auth reference
+- `docs/security/auth-matrix-step1.md` - Auth audit snapshot
+- `scripts/README.md` - Import/export script details

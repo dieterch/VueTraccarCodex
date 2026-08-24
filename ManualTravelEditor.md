@@ -1,48 +1,21 @@
-## IMPORTANT
+# Manual Travel And Repair Editor
 
-This document must be read together with:
-- SOFTWARE_SPECIFICATION.md
+This document describes the current `ManualTravelEditor.vue` feature in VueTraccarCodex.
 
-If there is a conflict:
-- SOFTWARE_SPECIFICATION.md defines the system architecture
-- This document defines the new feature
+## Purpose
 
-Proceed without asking questions.
+The editor supports two related workflows:
 
+- Manual travel reconstruction from raw Traccar points.
+- Repair of a broken automatically detected travel by combining original points, replacement-device points, and manually placed points.
 
-# Spezifikation für „Manuelle Reise-Rekonstruktion“ (Manual Travel Editor)
+Saved manual and repaired travels are persisted as normal manual travels. They are included in `/api/travels` with `source: "manual"` and can be selected/rendered like automatically detected travels.
 
-## 🎯 Ziel
+## Data Model
 
-Diese Erweiterung für **VueTraccar** ermöglicht es, historische Reisen (z. B. aus dem Jahr 2019) aus den Rohdaten eines **sekundären Trackers (iPhone)** manuell zu rekonstruieren.
+Manual and repaired travels use these SQLite tables in `data/app.db`.
 
-Der Fokus liegt bewusst auf **manueller Kuratierung** statt automatischer Analyse.
-
-Die Erweiterung soll:
-
-1. Rohdaten eines Traccar-Geräts für einen wählbaren Zeitraum laden
-2. Eine interaktive Karten-basierte Bearbeitung (Selektion & Löschen von Punkten) erlauben
-3. Das Ergebnis als *manuell rekonstruierte Reise* persistent speichern
-4. Diese Reisen gleichwertig mit automatisch erkannten Reisen anzeigen
-5. Export / Import (Backup & Restore) ermöglichen
-
----
-
-## 🧠 Grundprinzip
-
-- Manuelle Reisen sind **kein Sonderfall** der bestehenden Auto-Reisen
-- Sie sind ein **eigener Travel-Typ** mit eigener Datenhaltung
-- Nach dem Speichern sind sie **immutable** (nur löschen / neu anlegen)
-
-```ts
-type TravelSource = 'auto' | 'manual'
-```
-
----
-
-## 🧱 1. Datenbank-Erweiterung (SQLite – app.db)
-
-### Tabelle: manual_travels
+### `manual_travels`
 
 ```sql
 CREATE TABLE manual_travels (
@@ -56,7 +29,7 @@ CREATE TABLE manual_travels (
 );
 ```
 
-### Tabelle: manual_travel_positions
+### `manual_travel_positions`
 
 ```sql
 CREATE TABLE manual_travel_positions (
@@ -72,270 +45,145 @@ CREATE TABLE manual_travel_positions (
 );
 ```
 
----
+Repair points are identified through `attributes.source` values:
 
-## 🛠 2. Backend API
+- `repair-original`
+- `repair-replacement`
+- `manual-repair`
 
-### GET /api/manual-travels
+The editor also detects saved repairs from notes containing `Repair mode:` or `Repair for`, and from titles beginning with `Reparatur -`.
 
-Liste aller manuellen Reisen.
+## Backend Endpoints
 
-```json
-[
-  {
-    "id": "uuid",
-    "title": "Portugal & Spanien 2019",
-    "source_device_id": 12,
-    "from_date": "2019-05-05T00:00:00Z",
-    "to_date": "2019-06-10T00:00:00Z",
-    "notes": "Rekonstruiert aus iPhone-Tracking",
-    "created_at": "2026-02-09T12:00:00Z"
-  }
-]
-```
+Admin-only endpoints:
 
----
+- `GET /api/manual-travels`
+- `POST /api/manual-travels`
+- `PATCH /api/manual-travels/{id}`
+- `DELETE /api/manual-travels/{id}`
+- `GET /api/manual-travels/{id}/positions`
+- `POST /api/manual-travels/{id}/positions`
+- `POST /api/manual-route`
 
-### GET /api/manual-travels/:id/positions
+Optional workspace endpoints are implemented but are not the primary frontend flow:
 
-Alle Positionen einer manuellen Reise.
+- `POST /api/manual-travel-workspace/open`
+- `POST /api/manual-travel-workspace/delete`
+- `POST /api/manual-travel-workspace/keep`
+- `POST /api/manual-travel-workspace/reset`
+- `POST /api/manual-travel-workspace/finalize`
 
-```json
-[
-  {
-    "id": "uuid",
-    "travel_id": "uuid",
-    "fix_time": "2019-03-01T00:00:00Z",
-    "latitude": 38.7223,
-    "longitude": -9.1393,
-    "speed": 0,
-    "altitude": 12,
-    "attributes": { "battery": 0.92 }
-  }
-]
-```
+## Frontend Workflow
 
----
+Open the editor through `Manuelle Reisen & Reparatur`.
 
-### POST /api/manual-travels
+### Manual Mode
 
-Erstellt eine neue manuelle Reise.
+1. Select source device and time range.
+2. Click `Daten laden`.
+3. Use lasso selection to remove or keep route segments.
+4. Optionally add notes/title.
+5. Save the curated travel.
+
+### Repair Mode
+
+1. Switch to `Reparatur`.
+2. Select the broken travel under `Kaputte Reise`.
+3. Click `Vorlage laden` to load the original trace context.
+4. Select a replacement device and replacement time range.
+5. Load replacement points.
+6. Use lasso selection on target or replacement layer.
+7. Import selected replacement points into the repaired travel.
+8. Add manual points where no replacement trace exists.
+9. If needed, select manual repair points and shift their date/time.
+10. Save the repaired travel.
+
+Saved repairs remain in the same saved-travel menu as manual travels. Loading a saved repair automatically switches the editor back to repair mode.
+
+## Selection And Editing
+
+Supported editing actions:
+
+- Lasso select points.
+- Delete selected points.
+- Keep selected points and discard the rest.
+- Undo/redo local changes.
+- Reset current workspace to loaded raw points.
+- Reduce dense point sets.
+- Add manual repair points by clicking on the map in manual point mode.
+- Shift date/time for selected manual repair points.
+
+## Browser JSON Export/Import
+
+The editor menu includes browser-side JSON import/export.
+
+### Export
+
+Click the export icon beside a saved manual/repaired travel. The browser downloads a JSON file with:
 
 ```json
 {
-  "title": "Portugal & Spanien 2019",
-  "source_device_id": 12,
-  "from_date": "2019-03-01T00:00:00Z",
-  "to_date": "2019-05-10T00:00:00Z",
-  "notes": "Rekonstruiert aus iPhone-Tracking"
-}
-```
-
-Antwort:
-
-```json
-{ "id": "uuid" }
-```
-
----
-
-### POST /api/manual-travels/:id/positions
-
-Speichert die bereinigten Positionsdaten (ersetzt vorhandene Positionsdaten).
-
-```json
-{
+  "meta": {
+    "source": "manual-travel-ui",
+    "version": 1,
+    "created": "2026-08-24T00:00:00.000Z",
+    "count": 1
+  },
+  "travel": {
+    "id": "uuid",
+    "title": "Travel title",
+    "source_device_id": 4,
+    "from_date": "2026-01-01T00:00:00.000Z",
+    "to_date": "2026-01-02T00:00:00.000Z",
+    "notes": "..."
+  },
   "positions": [
     {
-      "id": "uuid",
-      "fixTime": "2019-03-01T00:00:00Z",
-      "latitude": 38.7223,
-      "longitude": -9.1393,
+      "id": "point-id",
+      "travel_id": "uuid",
+      "fix_time": "2026-01-01T12:00:00.000Z",
+      "latitude": 47.0,
+      "longitude": 11.0,
       "speed": 0,
-      "altitude": 12,
-      "attributes": { "battery": 0.92 }
+      "altitude": 0,
+      "attributes": {}
     }
   ]
 }
 ```
 
----
-
-### DELETE /api/manual-travels/:id
-
-Löscht eine manuelle Reise inkl. Positionsdaten.
-
----
-
-## 🧪 3. Workspace-Service (Server-seitig)
-
-### ManualTravelWorkspaceService
-
-Zweck: Temporärer Bearbeitungsraum vor Persistierung.
-
-```ts
-openWorkspace(deviceId, fromDate, toDate)
-deleteSelectedPoints(pointIds)
-keepSelectedPoints(pointIds)
-resetWorkspace()
-finalizeTravel(title, notes)
-```
-
-State:
-
-```ts
-type WorkspaceState = {
-  rawPoints: Position[]
-  currentPoints: Position[]
-  selectedPointIds: string[]
-}
-```
-
-### Workspace API Endpoints
-
-Diese Endpoints sind implementiert, aber aktuell nicht vom Frontend verdrahtet:
-
-- POST `/api/manual-travel-workspace/open`
-```json
-{ "deviceId": 12, "fromDate": "2019-03-01T00:00:00Z", "toDate": "2019-05-10T00:00:00Z" }
-```
-
-- POST `/api/manual-travel-workspace/delete`
-```json
-{ "workspaceId": "uuid", "pointIds": ["1","2"] }
-```
-
-- POST `/api/manual-travel-workspace/keep`
-```json
-{ "workspaceId": "uuid", "pointIds": ["1","2"] }
-```
-
-- POST `/api/manual-travel-workspace/reset`
-```json
-{ "workspaceId": "uuid" }
-```
-
-- POST `/api/manual-travel-workspace/finalize`
-```json
-{ "workspaceId": "uuid", "title": "Portugal & Spanien 2019", "notes": "..." }
-```
-
----
-
-## 🗺 4. Frontend – ManualTravelEditor.vue
-
-### Props
-
-```ts
-(Dialog gesteuert über `manualtraveldialog`)
-```
-
-### UI-Elemente
-
-- Google Map
-- Zeitraum-Inputs (datetime-local)
-- Lasso-Selektion
-- Buttons:
-  - Auswahl löschen
-  - Auswahl behalten (invertieren)
-  - Undo / Redo
-  - Zurücksetzen
-  - Speichern
-
----
-
-## ✏️ 5. UX Flow
-
-1. Nutzer wählt „Manual Travel” im Menü (Admin)
-2. Gerät + Zeitraum auswählen
-3. Daten werden geladen
-4. Nutzer entfernt irrelevante Bewegungen (Lasso + löschen/halten)
-5. Titel vergeben & speichern (manuelle Reise wird persistiert)
-6. Reise erscheint in der Travel-Liste
-
----
-
-## 📅 6. Integration in bestehende Travel-Liste
-
-```ts
-const allTravels = [...autoTravels, ...manualTravels]
-  .sort(byStartDate)
-```
-
-Manuelle Reisen sollen **gleichwertig** dargestellt werden (Icon `mdi-hand` im Dropdown).
-
-Zusatzfelder im Travel-Objekt:
-```ts
-{
-  id: string
-  source: 'auto' | 'manual'
-  deviceId?: number
-  notes?: string
-  created_at?: string
-}
-```
-
----
-
-## 📦 7. Export / Import
-
-### Export
-
-```json
-{
-  "meta": {
-    "source": "manual",
-    "created": "2026-02-09T12:00:00.000Z",
-    "database": "/path/to/app.db",
-    "count": 1
-  },
-  "travel": { ... },
-  "positions": [ ... ]
-}
-```
-
 ### Import
 
-- Validierung
-- Persistierung
-- Keine Abhängigkeit von Traccar
+Click `Import JSON` in the editor menu and select a JSON file from the local computer.
 
-### Scripts
+Import behavior:
 
-- Export: `node scripts/export-manual-travels.cjs [travel-id] [output-file]`
-- Import: `node scripts/import-manual-travels.cjs <input-file> [--dry-run|--replace]`
+- No special server directory is required.
+- The browser reads the file and sends data through existing API endpoints.
+- Import validates travel metadata and positions before writing.
+- Import creates a new travel; it does not overwrite or merge existing data.
+- Importing the same file twice creates duplicate travels.
+- Duplicates can be removed through the delete icon in the saved-travel menu.
 
----
+The importer accepts:
 
-## 🧪 8. Tests (Empfohlen)
+- Single-travel format: `{ "travel": {...}, "positions": [...] }`
+- Multi-travel format: `{ "travels": [{ "travel": {...}, "positions": [...] }] }`
 
-### Backend
-- CRUD manual_travels
-- Positions Persistenz
-- Export / Import
+## Script Export/Import
 
-### Frontend
-- Laden großer Tracks
-- Lasso-Selektion
-- Undo / Redo
-- Speichern
+Server-side scripts are still available for backups and migration:
 
----
+```bash
+node scripts/export-manual-travels.cjs [travel-id] [output-file.json]
+node scripts/import-manual-travels.cjs <input-file.json> [--dry-run|--merge|--replace]
+```
 
-## 📌 9. Nicht-Ziele
+Use scripts for full server backups. Use browser import/export for quick transfer of one manually repaired travel from the UI.
 
-- Keine automatische Reise-Erkennung
-- Keine Heuristiken
-- Keine implizite Änderung bestehender Auto-Reisen
+## Non-Goals
 
----
-
-## 🏁 Zielzustand
-
-- Historische Reisen (2019) sind sauber rekonstruiert
-- Ergebnisse sind versionierbar, exportierbar und reproduzierbar
-- Bestehende VueTraccar-Architektur bleibt stabil
-
----
-
-**Dieses Dokument ist direkt für Codex CLI geeignet.**
+- No automatic inference of missing route segments.
+- No implicit overwrite on JSON import.
+- No mutation of existing automatically detected travels.
+- No secret handling in this editor.

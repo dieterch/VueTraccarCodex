@@ -2,6 +2,8 @@
 
 Helper scripts to export and import data between different instances of the application.
 
+For single manual or repaired travels, the web editor also supports browser-side JSON import/export. Use the scripts here for server-side backup, migration, dry-run, and replace workflows.
+
 ## Overview
 
 These scripts allow you to:
@@ -348,7 +350,7 @@ node scripts/import-manual-travels.cjs manual-travels-export.json --replace
 
 ```bash
 # Export current travel patches
-cd /path/to/VueTraccarNuxt
+cd /path/to/VueTraccarCodex
 node scripts/export-travel-patches.cjs data/travel-patches-backup-$(date +%Y%m%d).yml
 ```
 
@@ -356,7 +358,7 @@ node scripts/export-travel-patches.cjs data/travel-patches-backup-$(date +%Y%m%d
 
 ```bash
 # Export current adjustments
-cd /path/to/VueTraccarNuxt
+cd /path/to/VueTraccarCodex
 node scripts/export-timings.cjs backup-$(date +%Y%m%d).json
 ```
 
@@ -410,7 +412,7 @@ node scripts/import-timings.cjs timings-to-transfer.json --replace
 
 ```bash
 # Export current manual POIs
-cd /path/to/VueTraccarNuxt
+cd /path/to/VueTraccarCodex
 node scripts/export-manual-pois.cjs manual-pois-backup-$(date +%Y%m%d).json
 ```
 

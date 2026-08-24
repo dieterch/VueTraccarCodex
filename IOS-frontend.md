@@ -80,7 +80,7 @@ VueTraccarIOS/
 
 ## 4. Backend API Contract Mapping
 
-Use these existing endpoints as-is:
+Use these existing endpoints as-is after mobile login. Send the access token as `Authorization: Bearer <accessToken>`.
 
 - `POST /api/travels` -> load detected travels
 - `POST /api/plotmaps` -> load route map data + distances
@@ -229,6 +229,7 @@ For native iOS, use mobile bearer auth with refresh tokens:
 - `POST /api/mobile/auth/login` returns `accessToken` (15m) + `refreshToken` (30d).
 - `POST /api/mobile/auth/refresh` rotates refresh token and returns new pair.
 - `POST /api/mobile/auth/logout` revokes session family.
+- The backend does not duplicate all data routes under `/api/mobile/*`; call the existing `/api/*` data endpoints with the bearer token.
 - Store refresh token in iOS Keychain only.
 - On API `401`, run exactly one refresh attempt, then retry the original request once.
 - Use single-flight refresh to avoid parallel refresh storms.
